@@ -28,38 +28,30 @@ public class VehicleSpawnerFinal : MonoBehaviour
     [Header("Truck Resource")]
     public ResourceType truckResourceType = ResourceType.None;
 
+    [Header("Artillery Positions")]
+    public ArtilleryPositionManager artilleryManager;
+
     GameObject currentVehicle;
 
     // =========================================================
     // START
     // =========================================================
-    void Start()
-    {
-        // registra veículo inicial da cena
-        VehicleController vc =
-            FindObjectOfType<VehicleController>();
-
-        if (vc != null)
-        {
-            currentVehicle =
-                vc.transform.root.gameObject;
-
-            Debug.Log(
-                "🚗 Veículo inicial registrado: " +
-                currentVehicle.name
-            );
-
-            {
-    Rigidbody rb = GetComponent<Rigidbody>();
-
-    rb.centerOfMass = new Vector3(0, -1f, 0);
-            }
-
-            
-        }
-
-        void Start()
+void Start()
 {
+    VehicleController vc =
+        FindObjectOfType<VehicleController>();
+
+    if (vc != null)
+    {
+        currentVehicle =
+            vc.transform.root.gameObject;
+
+        Debug.Log(
+            "🚗 Veículo inicial registrado: " +
+            currentVehicle.name
+        );
+    }
+
     Debug.Log(
         gameObject.name +
         " possui " +
@@ -67,8 +59,6 @@ public class VehicleSpawnerFinal : MonoBehaviour
         " blueprints"
     );
 }
-    }
-
     // =========================================================
     // UPDATE
     // =========================================================
@@ -268,8 +258,176 @@ Debug.Log("================================");
         // =====================================================
         // SPAWN
         // =====================================================
-        SpawnVehicle(selected, teamOwner);
+        if (desiredRole == VehicleRole.Artillery)
+{
+    SpawnStaticArtillery(
+        selected,
+        teamOwner
+    );
+}
+else
+{
+    SpawnVehicle(
+        selected,
+        teamOwner
+    );
+}
     }
+
+     // =====================================================
+        // SPAWN ARTILERY ZONE
+        // =====================================================
+void SpawnStaticArtillery(
+    VehicleBlueprint blueprint,
+    Team team
+)
+{
+    if (artilleryManager == null)
+    {
+        Debug.LogError(
+            "❌ ArtilleryManager não atribuído"
+        );
+        return;
+    }
+
+    ArtilleryPosition pos =
+        artilleryManager.GetFreePosition();
+
+    if (pos == null)
+    {
+        Debug.Log("🚫 Nenhuma posição livre");
+        return;
+    }
+
+    GameObject vehicle =
+        Instantiate(
+            blueprint.prefab,
+            pos.spawnPoint.position,
+            pos.spawnPoint.rotation
+        );
+
+    // =====================================
+    // REGISTRA POSIÇÃO
+    // =====================================
+    pos.Occupy(vehicle);
+
+    // =====================================
+    // TEAM
+    // =====================================
+    TeamMember tm =
+        vehicle.GetComponentInChildren<TeamMember>();
+
+    if (tm != null)
+    {
+        tm.SetTeam(team);
+    }
+
+    // =====================================
+// CONTROLE
+// =====================================
+VehicleController vc =
+    vehicle.GetComponentInChildren<VehicleController>();
+
+if (vc != null)
+{
+    vc.SetControlled(true);
+}
+
+// =====================================
+// DEPLOYED AO NASCER
+// =====================================
+DeployableVehicle deploy =
+    vehicle.GetComponentInChildren<DeployableVehicle>();
+
+if (deploy != null)
+{
+    deploy.canDeploy = true;
+
+    deploy.Deploy();
+
+    Debug.Log(
+        "🏹 SPG nasceu DEPLOYED"
+    );
+}
+else
+{
+    Debug.LogError(
+        "❌ DeployableVehicle não encontrado!"
+    );
+
+}
+    // =====================================
+    // REFERÊNCIA
+    // =====================================
+    currentVehicle = vehicle;
+
+    // =====================================
+    // CAMERA
+    // =====================================
+    SetupCamera(
+        vehicle,
+        blueprint
+    );
+
+    Debug.Log(
+        "🏹 Artilharia posicionada em " +
+        pos.name
+    );
+}
+
+void SetupCamera(
+    GameObject vehicle,
+    VehicleBlueprint blueprint
+)
+{
+    if (cameraRig == null)
+        return;
+
+    Transform target = vehicle.transform;
+
+    Transform pivot = null;
+
+    foreach (
+        Transform t
+        in vehicle.GetComponentsInChildren<Transform>()
+    )
+    {
+        if (t.name == "CameraPivot")
+        {
+            pivot = t;
+            break;
+        }
+    }
+
+    if (pivot != null)
+    {
+        target = pivot;
+    }
+
+    cameraRig.target = target;
+
+    foreach (
+        Transform t
+        in vehicle.GetComponentsInChildren<Transform>()
+    )
+    {
+        if (t.name == "DriverView")
+            cameraRig.driverView = t;
+
+        if (t.name == "GunView")
+            cameraRig.gunView = t;
+    }
+
+    cameraRig.SetDefaultDistance(
+        blueprint.cameraDistance
+    );
+
+    cameraRig.SetFOV(
+        blueprint.cameraFOV
+    );
+
+    Debug.Log("🎯 Camera configurada");
+}
 
     // =========================================================
     // SPAWN VEHICLE

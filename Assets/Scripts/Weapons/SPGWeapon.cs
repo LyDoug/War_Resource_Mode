@@ -150,6 +150,6 @@ public class SPGWeapon : MonoBehaviour
                 -firePoint.forward * 0.15f;
         }
 
-        Debug.Log("💥 SPG FIRED");
+        //Debug.Log("💥 SPG FIRED");
     }
 }

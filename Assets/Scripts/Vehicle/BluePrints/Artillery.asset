@@ -26,6 +26,4 @@ MonoBehaviour:
   recoilDistance: 0.7
   cameraDistance: 6
   cameraFOV: 60
-  costs:
-  - resource: 1
-    amount: 1
+  costs: []
