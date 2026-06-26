@@ -10,29 +10,29 @@ public class DeployableVehicle : MonoBehaviour
 
     public MonoBehaviour[] weaponSystems;
 
-    VehicleMotor motor;
+    VehicleMotorBase motor;
     Rigidbody rb;
 
-    void Awake()
+ void Awake()
+{
+    motor =
+        GetComponent<VehicleMotorBase>();
+
+    if (motor == null)
     {
         motor =
-            GetComponent<VehicleMotor>();
-
-        if (motor == null)
-        {
-            motor =
-                GetComponentInChildren<VehicleMotor>();
-        }
-
-        rb =
-            GetComponent<Rigidbody>();
-
-        if (rb == null)
-        {
-            rb =
-                GetComponentInChildren<Rigidbody>();
-        }
+            GetComponentInChildren<VehicleMotorBase>();
     }
+
+    rb =
+        GetComponent<Rigidbody>();
+
+    if (rb == null)
+    {
+        rb =
+            GetComponentInChildren<Rigidbody>();
+    }
+}
 
     void Update()
     {
@@ -96,7 +96,7 @@ public void Deploy()
 
     if (motor != null)
     {
-        motor.enabled = false;
+        motor.EnableMovement(false);
     }
 
     if (rb != null)
@@ -104,7 +104,7 @@ public void Deploy()
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
-        rb.isKinematic = true;
+        motor.EnableMovement(true);
     }
 
     Debug.Log(gameObject.name + " DEPLOYED");
@@ -125,7 +125,7 @@ public void DeployInstant()
 
     if (motor != null)
     {
-        motor.enabled = false;
+         motor.EnableMovement(false);
     }
 
     if (rb != null)
@@ -162,14 +162,9 @@ public void DeployInstant()
 
     if (rb != null)
     {
-        rb.isKinematic = false;
+        motor.EnableMovement(false);
     }
-
-    if (motor != null)
-    {
-        motor.enabled = true;
-    }
-
+    
     Debug.Log(
         gameObject.name +
         " voltou para TRANSPORT MODE"

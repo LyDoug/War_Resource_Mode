@@ -70,6 +70,12 @@ public class GameManager : MonoBehaviour
     bool gameEnded = false;
 
     // =====================================================
+    // RADARSTATION
+    // =====================================================
+    public RadarStation teamARadar;
+    public RadarStation teamBRadar;
+
+    // =====================================================
     // AWAKE
     // =====================================================
 
@@ -93,6 +99,23 @@ public class GameManager : MonoBehaviour
         HandleTicketDrain();
 
         CheckVictory();
+    }
+
+
+    // =====================================================
+    // RADAR
+    // =====================================================
+    public bool HasRadar(Team team)
+    {
+    if(team == Team.TeamA)
+        return teamARadar != null &&
+               teamARadar.IsOperational();
+
+    if(team == Team.TeamB)
+        return teamBRadar != null &&
+               teamBRadar.IsOperational();
+
+    return false;
     }
 
     // =====================================================

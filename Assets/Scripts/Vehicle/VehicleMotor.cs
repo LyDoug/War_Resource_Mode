@@ -1,7 +1,7 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-public class VehicleMotor : MonoBehaviour
+public class VehicleMotor : VehicleMotorBase
 {
     [Header("Blueprint")]
     public VehicleBlueprint blueprint;
@@ -12,7 +12,6 @@ public class VehicleMotor : MonoBehaviour
     [Header("Input")]
     public bool usePlayerInput = true;
 
-    Rigidbody rb;
 
     float moveInput;
     float turnInput;
@@ -22,8 +21,11 @@ public class VehicleMotor : MonoBehaviour
     // =====================================================
     void Awake()
     {
-        rb = GetComponent<Rigidbody>();
+         protected override void Awake()
+       {
+        base.Awake();
 
+        rb = GetComponent<Rigidbody>();
         // =========================
         // RIGIDBODY SETTINGS
         // =========================
@@ -43,13 +45,7 @@ public class VehicleMotor : MonoBehaviour
 
         rb.collisionDetectionMode =
             CollisionDetectionMode.Continuous;
-
-        // =========================
-        // CONSTRAINTS
-        // =========================
-        rb.constraints =
-            RigidbodyConstraints.FreezeRotationX |
-            RigidbodyConstraints.FreezeRotationZ;
+    
 
         // =========================
         // CENTER OF MASS
@@ -61,7 +57,7 @@ public class VehicleMotor : MonoBehaviour
                     centerOfMass.position
                 );
         }
-    }
+
 
     // =====================================================
     // UPDATE
@@ -80,6 +76,7 @@ public class VehicleMotor : MonoBehaviour
                 Input.GetAxis("Horizontal");
         }
     }
+       }
 
     // =====================================================
     // AI INPUT
@@ -100,7 +97,9 @@ public class VehicleMotor : MonoBehaviour
     // FIXED UPDATE
     // =====================================================
     void FixedUpdate()
-    {
+    { 
+        if (!CanMove())
+        return; 
         if (blueprint == null)
             return;
 
@@ -119,7 +118,9 @@ public class VehicleMotor : MonoBehaviour
     // MOVE
     // =====================================================
     void MoveVehicle()
-    {
+    { 
+       if (!CanMove())
+        return;
         rb.AddForce(
             transform.forward *
             moveInput *
@@ -132,7 +133,10 @@ public class VehicleMotor : MonoBehaviour
     // TURN
     // =====================================================
     void TurnVehicle()
-    {
+    {  
+        if (!CanMove())
+        return;
+
         // só vira se estiver andando
         if (Mathf.Abs(moveInput) < 0.05f)
             return;
@@ -158,7 +162,10 @@ public class VehicleMotor : MonoBehaviour
     // SIDE GRIP
     // =====================================================
     void ApplySideGrip()
-    {
+    { 
+         if (!CanMove())
+        return;
+
         Vector3 localVelocity =
             transform.InverseTransformDirection(
                 rb.linearVelocity
@@ -177,7 +184,10 @@ public class VehicleMotor : MonoBehaviour
     // DOWNFORCE
     // =====================================================
     void ApplyDownforce()
-    {
+    {  
+        if (!CanMove())
+        return;
+
         rb.AddForce(
             Vector3.down * 50f,
             ForceMode.Acceleration
@@ -188,7 +198,9 @@ public class VehicleMotor : MonoBehaviour
     // LIMIT SPEED
     // =====================================================
     void LimitSpeed()
-    {
+    {  
+        if (!CanMove())
+        return;
         Vector3 flatVelocity =
             new Vector3(
                 rb.linearVelocity.x,
@@ -211,6 +223,9 @@ public class VehicleMotor : MonoBehaviour
                     rb.linearVelocity.y,
                     limitedVelocity.z
                 );
+         }
         }
-    }
+
+    }      
+
 }

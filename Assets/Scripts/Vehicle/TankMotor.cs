@@ -1,7 +1,7 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-public class TankMotor : MonoBehaviour
+public class TankMotor : VehicleMotorBase
 {
     [Header("Blueprint")]
     public VehicleBlueprint blueprint;
@@ -13,8 +13,6 @@ public class TankMotor : MonoBehaviour
     [Range(0f, 1f)]
     public float sideGrip = 0.85f;
 
-    Rigidbody rb;
-
     float moveForce;
     float turnSpeed;
     float maxSpeed;
@@ -25,9 +23,9 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     // AWAKE
     // =====================================================
-    void Awake()
+    protected override void Awake()
     {
-        rb = GetComponent<Rigidbody>();
+        base.Awake();
 
         ApplyPhysics();
 
@@ -51,6 +49,9 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     void FixedUpdate()
     {
+        if (!CanMove())
+            return;
+
         Move();
 
         Turn();
@@ -100,7 +101,6 @@ public class TankMotor : MonoBehaviour
             moveForce = 35f;
             turnSpeed = 45f;
             maxSpeed = 12f;
-
             return;
         }
 
@@ -122,6 +122,9 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     void Move()
     {
+        if (!CanMove())
+            return;
+
         if (Mathf.Abs(moveInput) < 0.01f)
             return;
 
@@ -138,6 +141,9 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     void Turn()
     {
+        if (!CanMove())
+            return;
+
         if (Mathf.Abs(turnInput) < 0.01f)
             return;
 
@@ -154,7 +160,8 @@ public class TankMotor : MonoBehaviour
             );
 
         rb.MoveRotation(
-            rb.rotation * turnRotation
+            rb.rotation *
+            turnRotation
         );
     }
 
@@ -163,6 +170,12 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     void ApplyGrip()
     {
+        if (!CanMove())
+            return;
+
+        if (rb.isKinematic)
+            return;
+
         Vector3 localVelocity =
             transform.InverseTransformDirection(
                 rb.linearVelocity
@@ -181,6 +194,12 @@ public class TankMotor : MonoBehaviour
     // =====================================================
     void LimitSpeed()
     {
+        if (!CanMove())
+            return;
+
+        if (rb.isKinematic)
+            return;
+
         Vector3 flatVelocity =
             new Vector3(
                 rb.linearVelocity.x,
