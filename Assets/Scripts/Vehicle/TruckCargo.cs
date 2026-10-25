@@ -19,10 +19,28 @@ public class TruckCargo : MonoBehaviour
 
     void Update()
     {
-        // 🔥 TESTE TEMPORÁRIO
-        if (Input.GetKeyDown(KeyCode.L))
+        if (!Input.GetKeyDown(KeyCode.B) || GameManager.Instance == null)
+            return;
+
+        TeamMember teamMember = GetComponentInParent<TeamMember>();
+        if (teamMember == null || teamMember.team != GameManager.Instance.PlayerTeam)
+            return;
+
+        VehicleController controller = GetComponentInParent<VehicleController>();
+        if (controller != null)
+            controller.SetControlled(false);
+
+        teamMember.SetTeam(Team.Neutral);
+
+        foreach (VehicleSpawnerFinal spawner in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))
         {
-            Load(ResourceType.Steel, 1);
+            if (spawner.playerTeam == GameManager.Instance.PlayerTeam &&
+                spawner.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                spawner.TrySpawn(VehicleRole.Jeep);
+                Debug.Log("Caminhão abandonado. Novo jipe enviado da base principal.");
+                break;
+            }
         }
     }
 
@@ -97,13 +115,15 @@ public class TruckCargo : MonoBehaviour
             return false;
         }
 
+        if (type == ResourceType.None || value <= 0 || maxCapacity <= 0)
+        {
+            Debug.LogWarning("Carga inválida para o caminhão.");
+            return false;
+        }
+
         carriedResource = type;
 
-        amount = Mathf.Clamp(
-            value,
-            0,
-            maxCapacity
-        );
+        amount = Mathf.Min(value, maxCapacity);
 
         Debug.Log(
             $"📦 Truck carregou {amount} de {type}"
@@ -119,6 +139,12 @@ public class TruckCargo : MonoBehaviour
     // =====================================================
     public bool Unload(BaseInventory inventory)
     {
+        if (inventory == null)
+        {
+            Debug.LogWarning("Inventário de destino não encontrado.");
+            return false;
+        }
+
         if (!HasCargo())
         {
             Debug.Log("🚫 Truck vazio");
@@ -134,26 +160,6 @@ public class TruckCargo : MonoBehaviour
         Debug.Log(
             $"🏭 Entregue {amount} de {carriedResource}"
         );
-
-        // =================================================
-        // DESBLOQUEIA TANK
-        // =================================================
-        TeamMember tm = GetComponent<TeamMember>();
-
-        if (tm != null && GameManager.Instance != null)
-        {
-            if (tm.team == Team.TeamA)
-            {
-                GameManager.Instance.teamATankUnlocked = true;
-            }
-
-            if (tm.team == Team.TeamB)
-            {
-                GameManager.Instance.teamBTankUnlocked = true;
-            }
-
-            Debug.Log("🛡️ Tank desbloqueado!");
-        }
 
         // limpa carga
         carriedResource = ResourceType.None;

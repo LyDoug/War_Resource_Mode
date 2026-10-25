@@ -2,11 +2,15 @@ using UnityEngine;
 
 public abstract class VehicleMotorBase : MonoBehaviour
 {
-    [HideInInspector]
-    public bool movementEnabled = true;
+    [Header("Motor State")]
+    [SerializeField]
+    protected bool movementEnabled = true;
 
     protected Rigidbody rb;
 
+    // =====================================================
+    // AWAKE
+    // =====================================================
     protected virtual void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -15,11 +19,35 @@ public abstract class VehicleMotorBase : MonoBehaviour
             rb = GetComponentInChildren<Rigidbody>();
     }
 
+    // =====================================================
+    // ENABLE / DISABLE MOVEMENT
+    // =====================================================
     public virtual void EnableMovement(bool enable)
     {
         movementEnabled = enable;
+
+        if (rb == null)
+            return;
+
+        if (enable)
+        {
+            if (!rb.isKinematic)
+            {
+                rb.WakeUp();
+            }
+        }
+        else
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+
+            rb.Sleep();
+        }
     }
 
+    // =====================================================
+    // CAN MOVE?
+    // =====================================================
     protected bool CanMove()
     {
         if (!movementEnabled)
@@ -32,5 +60,13 @@ public abstract class VehicleMotorBase : MonoBehaviour
             return false;
 
         return true;
+    }
+
+    // =====================================================
+    // PUBLIC STATE
+    // =====================================================
+    public bool IsMovementEnabled()
+    {
+        return movementEnabled;
     }
 }

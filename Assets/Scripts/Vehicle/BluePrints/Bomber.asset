@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::VehicleBlueprint
   vehicleName: Bomber
   prefab: {fileID: 3280384310271628014, guid: bf253b5303cd99947a908d82dbd52708, type: 3}
-  moveForce: 120000
+  moveForce: 180000
   turnTorque: 35000
-  maxSpeed: 12
+  maxSpeed: 18
   mass: 8000
   fireRate: 0
   shellSpeed: 0

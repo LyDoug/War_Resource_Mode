@@ -480,7 +480,7 @@ MonoBehaviour:
   fireRate: 1.5
   shellSpeed: 120
   recoilDistance: 0.7
-  currentShellDamage: 100
+  currentShellDamage: 200
   recoilReturnSpeed: 10
   muzzleFlashPrefab: {fileID: 100004, guid: fd4a45d1b6004d444a831d09319a8712, type: 3}
   muzzleFlashDuration: 1.5
@@ -809,9 +809,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 509c5c4b43db5d64eb059ecfbe52b068, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TankMotor
+  movementEnabled: 1
   blueprint: {fileID: 11400000, guid: 8dc2be97b86918648be777f38f6c047f, type: 2}
   centerOfMass: {fileID: 8855831257960291412}
   sideGrip: 0.9
+  usePlayerInput: 1
+  accelerationResponse: 1.5
+  brakingResponse: 3.5
 --- !u!1 &7592419372546348898
 GameObject:
   m_ObjectHideFlags: 0
@@ -851,17 +855,17 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7592419372546348898}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 58d34c7ac12014e4da6c685567d1f076, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TankGun
   firePoint: {fileID: 1657428718835787958}
   shellPrefab: {fileID: 5272909772119827852, guid: 910b76ae43e2104439c5ed6b73b7912d, type: 3}
-  fireRate: 1.5
-  shellSpeed: 120
-  recoilDistance: 0.7
-  currentShellDamage: 100
-  recoilReturnSpeed: 10
+  fireRate: 0
+  shellSpeed: 0
+  recoilDistance: 0
+  currentShellDamage: 200
+  recoilReturnSpeed: 0
   muzzleFlashPrefab: {fileID: 100004, guid: fd4a45d1b6004d444a831d09319a8712, type: 3}
   muzzleFlashDuration: 1.5

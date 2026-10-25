@@ -153,6 +153,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: decede77b917051419af91395fcbb4f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Projectile
-  damage: 25
+  damage: 120
   impactEffectPrefab: {fileID: 100006, guid: 4a2b4b89e51ac894cb638775b60f0f58, type: 3}
   impactEffectDuration: 2

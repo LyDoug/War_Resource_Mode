@@ -103,4 +103,25 @@ public class ProjectileBallistic : MonoBehaviour
         // =====================================================
         Destroy(gameObject);
     }
+
+    // Resource mines use trigger colliders for collection/capture. A shell
+    // still needs to damage the structure when it enters that volume.
+    void OnTriggerEnter(Collider other)
+    {
+        if (hasImpacted)
+            return;
+
+        ResourceNode mine = other.GetComponent<ResourceNode>();
+        if (mine == null)
+            return;
+
+        BaseDestructibleWithHealthVisual structure =
+            mine.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+        if (structure == null)
+            return;
+
+        hasImpacted = true;
+        structure.TakeDamage(damage);
+        Destroy(gameObject);
+    }
 }

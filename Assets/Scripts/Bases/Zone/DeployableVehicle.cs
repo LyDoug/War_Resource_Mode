@@ -11,7 +11,6 @@ public class DeployableVehicle : MonoBehaviour
     public MonoBehaviour[] weaponSystems;
 
     VehicleMotorBase motor;
-    Rigidbody rb;
 
  void Awake()
 {
@@ -24,14 +23,6 @@ public class DeployableVehicle : MonoBehaviour
             GetComponentInChildren<VehicleMotorBase>();
     }
 
-    rb =
-        GetComponent<Rigidbody>();
-
-    if (rb == null)
-    {
-        rb =
-            GetComponentInChildren<Rigidbody>();
-    }
 }
 
     void Update()
@@ -58,22 +49,7 @@ public class DeployableVehicle : MonoBehaviour
 
     public void SetTransportMode(bool value)
     {
-        transportMode = value;
-
-        foreach (MonoBehaviour weapon in weaponSystems)
-        {
-            if (weapon != null)
-            {
-                weapon.enabled = !value;
-            }
-        }
-
-        Debug.Log(
-            gameObject.name +
-            (value
-                ? " entrou em TRANSPORT MODE"
-                : " saiu do TRANSPORT MODE")
-        );
+        SetMode(value, true);
     }
 
     // =====================================
@@ -85,61 +61,12 @@ public void Deploy()
     if (deployed)
         return;
 
-    transportMode = false;
-    deployed = true;
-
-    foreach (MonoBehaviour weapon in weaponSystems)
-    {
-        if (weapon != null)
-            weapon.enabled = true;
-    }
-
-    if (motor != null)
-    {
-        motor.EnableMovement(false);
-    }
-
-    if (rb != null)
-    {
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-
-        motor.EnableMovement(true);
-    }
-
-    Debug.Log(gameObject.name + " DEPLOYED");
+    SetMode(false, false);
 }
 
 public void DeployInstant()
 {
-    transportMode = false;
-    deployed = true;
-
-    foreach (MonoBehaviour weapon in weaponSystems)
-    {
-        if (weapon != null)
-        {
-            weapon.enabled = true;
-        }
-    }
-
-    if (motor != null)
-    {
-         motor.EnableMovement(false);
-    }
-
-    if (rb != null)
-    {
-        rb.constraints =
-            RigidbodyConstraints.FreezePositionX |
-            RigidbodyConstraints.FreezePositionZ |
-            RigidbodyConstraints.FreezeRotation;
-    }
-
-    Debug.Log(
-        gameObject.name +
-        " nasceu DEPLOYED"
-    );
+    SetMode(false, true);
 }
 
     // =====================================
@@ -151,23 +78,31 @@ public void DeployInstant()
     if (!deployed)
         return;
 
-    transportMode = true;
-    deployed = false;
-
-    foreach (MonoBehaviour weapon in weaponSystems)
-    {
-        if (weapon != null)
-            weapon.enabled = false;
-    }
-
-    if (rb != null)
-    {
-        motor.EnableMovement(false);
-    }
-    
-    Debug.Log(
-        gameObject.name +
-        " voltou para TRANSPORT MODE"
-    );
+    SetMode(true, false);
 }
+
+    void SetMode(bool enterTransportMode, bool force)
+    {
+        if (!force && transportMode == enterTransportMode)
+            return;
+
+        transportMode = enterTransportMode;
+        deployed = !enterTransportMode;
+
+        foreach (MonoBehaviour weapon in weaponSystems)
+        {
+            if (weapon != null)
+                weapon.enabled = !enterTransportMode;
+        }
+
+        if (motor != null)
+            motor.EnableMovement(enterTransportMode);
+
+        Debug.Log(
+            gameObject.name +
+            (enterTransportMode
+                ? " voltou para TRANSPORT MODE"
+                : " DEPLOYED")
+        );
+    }
 }

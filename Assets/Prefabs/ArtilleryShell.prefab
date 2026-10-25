@@ -153,7 +153,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf06545175f7fff42a7bb395648b63d6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArtilleryShell
-  damage: 100
+  damage: 400
   explosionRadius: 8
   explosionForce: 3000
   speed: 120

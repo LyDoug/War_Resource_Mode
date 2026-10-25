@@ -21,21 +21,14 @@ public class TeamSwitcher : MonoBehaviour
         }
     }
 
-    void Update()
+    public void SetTeam(Team newTeam)
     {
-        if (Input.GetKeyDown(KeyCode.Alpha1))
-            SetTeam(Team.TeamA);
-            
-            
-        if (Input.GetKeyDown(KeyCode.Alpha2))
-            SetTeam(Team.TeamB);
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.SelectPlayerTeam(newTeam);
+            return;
+        }
 
-        if (Input.GetKeyDown(KeyCode.Alpha0))
-            SetTeam(Team.Neutral);
-    }
-
-    void SetTeam(Team newTeam)
-    {
         if (player == null) return;
 
         player.SetTeam(newTeam);

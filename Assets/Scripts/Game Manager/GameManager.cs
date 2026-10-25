@@ -1,8 +1,21 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
+
+    [Header("Player Team")]
+    [SerializeField]
+    Team playerTeam = Team.Neutral;
+
+    public Team PlayerTeam => playerTeam;
+    public bool MatchStarted { get; private set; }
+    public bool GameEnded => gameEnded;
+    public Team WinningTeam { get; private set; } = Team.Neutral;
+    public bool tankBlueprintSelected = true;
+    public bool spgBlueprintSelected = true;
+    public VehicleSpawnerFinal ActiveSpawner { get; private set; }
 
     [Header("Tickets")]
     public float teamAResources = 500;
@@ -15,6 +28,10 @@ public class GameManager : MonoBehaviour
     [Header("Cities")]
     public int teamACities = 0;
     public int teamBCities = 0;
+
+    [Header("Bases")]
+    public int teamABases = 0;
+    public int teamBBases = 0;
 
     [Header("Mines")]
     public int teamAMines = 0;
@@ -88,6 +105,83 @@ public class GameManager : MonoBehaviour
         }
 
         Instance = this;
+
+        // Build the neutral objective layout before the structures run Start.
+        // The authored objects are templates; the runtime map is mirrored so
+        // neither team receives a positional resource advantage.
+        BalancedBattlefieldLayout layout = GetComponent<BalancedBattlefieldLayout>();
+        if (layout == null)
+            layout = gameObject.AddComponent<BalancedBattlefieldLayout>();
+        layout.Build();
+
+        BattlefieldEnvironment environment = GetComponent<BattlefieldEnvironment>();
+        if (environment == null)
+            environment = gameObject.AddComponent<BattlefieldEnvironment>();
+        environment.Build();
+
+        SetupMainBaseObjectives();
+
+        GameHUD spawnHud = GetComponent<GameHUD>();
+
+        if (spawnHud == null)
+            spawnHud = gameObject.AddComponent<GameHUD>();
+
+        spawnHud.showSpawnPanel = true;
+    }
+
+    void Start()
+    {
+        // One commander represents one opposing player. Earlier test builds
+        // duplicated this component at runtime, which made the AI dispatch
+        // duplicate scouts and resource trucks.
+        EnemySpawner[] enemies = FindObjectsByType<EnemySpawner>(FindObjectsSortMode.None);
+        for (int index = 1; index < enemies.Length; index++)
+            enemies[index].enabled = false;
+    }
+
+    void SetupMainBaseObjectives()
+    {
+        TeamMember[] members = FindObjectsByType<TeamMember>(FindObjectsSortMode.None);
+        foreach (TeamMember member in members)
+        {
+            if (member == null ||
+                member.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+
+            BaseDestructibleWithHealthVisual objective =
+                member.GetComponent<BaseDestructibleWithHealthVisual>();
+            if (objective == null)
+                objective = member.gameObject.AddComponent<BaseDestructibleWithHealthVisual>();
+
+            objective.endsMatchOnDestruction = true;
+            objective.mainBaseTeam = member.team;
+            objective.maxHealth = 500f;
+
+            FlagController baseFlag = member.GetComponent<FlagController>();
+            if (baseFlag == null)
+                baseFlag = member.gameObject.AddComponent<FlagController>();
+            baseFlag.SetOwner(member.team);
+
+            MainBaseResourceDispatcher dispatcher = member.GetComponent<MainBaseResourceDispatcher>();
+            if (dispatcher == null)
+                dispatcher = member.gameObject.AddComponent<MainBaseResourceDispatcher>();
+            dispatcher.team = member.team;
+            dispatcher.inventory = member.GetComponent<BaseInventory>() ??
+                member.GetComponentInChildren<BaseInventory>() ?? member.gameObject.AddComponent<BaseInventory>();
+            VehicleSpawnerFinal spawner = member.GetComponent<VehicleSpawnerFinal>() ?? member.GetComponentInChildren<VehicleSpawnerFinal>();
+            if (spawner != null)
+                dispatcher.spawnPoint = spawner.spawnPoint;
+        }
+    }
+
+    public void MainBaseDestroyed(Team destroyedTeam)
+    {
+        if (gameEnded || destroyedTeam == Team.Neutral)
+            return;
+
+        Team winner = destroyedTeam == Team.TeamA ? Team.TeamB : Team.TeamA;
+        Debug.Log("BASE PRINCIPAL " + destroyedTeam + " destruída. " + winner + " venceu!");
+        EndGame(winner);
     }
 
     // =====================================================
@@ -96,9 +190,74 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
+        HandleTeamSelection();
+
+        if (!MatchStarted)
+            return;
+
         HandleTicketDrain();
 
         CheckVictory();
+    }
+
+    void HandleTeamSelection()
+    {
+        if (MatchStarted)
+            return;
+
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+            SelectPlayerTeam(Team.TeamA);
+
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+            SelectPlayerTeam(Team.TeamB);
+    }
+
+    public void SelectPlayerTeam(Team team)
+    {
+        if (team != Team.TeamA && team != Team.TeamB)
+            return;
+
+        playerTeam = team;
+        Debug.Log("Equipe selecionada: " + team);
+    }
+
+    public bool IsBlueprintSelected(VehicleRole role)
+    {
+        return role == VehicleRole.Jeep || role == VehicleRole.Truck ||
+               (role == VehicleRole.Tank && tankBlueprintSelected) ||
+               (role == VehicleRole.Artillery && spgBlueprintSelected);
+    }
+
+    public void StartMatch()
+    {
+        if (playerTeam == Team.Neutral || MatchStarted)
+            return;
+
+        MatchStarted = true;
+
+        VehicleSpawnerFinal[] spawners =
+            FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None);
+        foreach (VehicleSpawnerFinal spawner in spawners)
+        {
+            if (spawner.baseCapture == null &&
+                spawner.playerTeam == playerTeam &&
+                spawner.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                spawner.TrySpawn(VehicleRole.Jeep);
+                break;
+            }
+        }
+    }
+
+    public void RestartMatch()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void SetActiveSpawner(VehicleSpawnerFinal spawner)
+    {
+        ActiveSpawner = spawner;
     }
 
 
@@ -194,6 +353,10 @@ public class GameManager : MonoBehaviour
                 case StructureType.Factory:
                     teamAFactories++;
                     break;
+
+                case StructureType.MainBase:
+                    teamABases++;
+                    break;
             }
         }
 
@@ -211,6 +374,10 @@ public class GameManager : MonoBehaviour
 
                 case StructureType.Factory:
                     teamBFactories++;
+                    break;
+
+                case StructureType.MainBase:
+                    teamBBases++;
                     break;
             }
         }
@@ -243,6 +410,11 @@ public class GameManager : MonoBehaviour
                     teamAFactories =
                         Mathf.Max(0, teamAFactories - 1);
                     break;
+
+                case StructureType.MainBase:
+                    teamABases =
+                        Mathf.Max(0, teamABases - 1);
+                    break;
             }
         }
 
@@ -263,6 +435,11 @@ public class GameManager : MonoBehaviour
                 case StructureType.Factory:
                     teamBFactories =
                         Mathf.Max(0, teamBFactories - 1);
+                    break;
+
+                case StructureType.MainBase:
+                    teamBBases =
+                        Mathf.Max(0, teamBBases - 1);
                     break;
             }
         }
@@ -380,13 +557,13 @@ public class GameManager : MonoBehaviour
         if (teamAResources <= 0.1f)
         {
             Debug.Log("🏆 TEAM B VENCEU!");
-            EndGame();
+            EndGame(Team.TeamB);
         }
 
         if (teamBResources <= 0.1f)
         {
             Debug.Log("🏆 TEAM A VENCEU!");
-            EndGame();
+            EndGame(Team.TeamA);
         }
     }
 
@@ -394,9 +571,10 @@ public class GameManager : MonoBehaviour
     // END GAME
     // =====================================================
 
-    void EndGame()
+    void EndGame(Team winner)
     {
         gameEnded = true;
+        WinningTeam = winner;
 
         Time.timeScale = 0f;
 

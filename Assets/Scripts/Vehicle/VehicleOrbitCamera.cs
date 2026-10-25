@@ -195,7 +195,11 @@ public class VehicleOrbitCamera : MonoBehaviour
             cameraTransform.rotation =
                 Quaternion.Lerp(
                     cameraTransform.rotation,
-                    gunView.rotation,
+                    // GunView provides the correct eye position, but it is
+                    // an authored transform and does not rotate with mouse
+                    // aim. Keeping the calculated yaw/pitch here prevents
+                    // the sight from drifting away from screen centre.
+                    rotation,
                     Time.deltaTime * 15f
                 );
 
@@ -220,7 +224,9 @@ public class VehicleOrbitCamera : MonoBehaviour
             cameraTransform.rotation =
                 Quaternion.Lerp(
                     cameraTransform.rotation,
-                    driverView.rotation,
+                    // DriverView is only the seat position. Aim remains
+                    // mouse-driven so every camera mode shares one reticle.
+                    rotation,
                     Time.deltaTime * 15f
                 );
 

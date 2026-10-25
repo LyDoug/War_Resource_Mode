@@ -18,12 +18,14 @@ public class TankCannonAim : MonoBehaviour
 
     float targetAngle;
     float currentAngle;
+    TankMotor tankMotor;
 
     // =====================================================
     // START
     // =====================================================
     void Start()
     {
+        tankMotor = GetComponentInParent<TankMotor>();
         currentAngle =
             NormalizeAngle(
                 transform.localEulerAngles.x
@@ -47,6 +49,23 @@ public class TankCannonAim : MonoBehaviour
     // =====================================================
     void HandleInput()
     {
+        if (tankMotor != null && tankMotor.usePlayerInput && Camera.main != null)
+        {
+            Transform turret = transform.parent;
+            Vector3 localAim = turret != null
+                ? turret.InverseTransformDirection(Camera.main.transform.forward)
+                : transform.InverseTransformDirection(Camera.main.transform.forward);
+            float horizontal = new Vector2(localAim.x, localAim.z).magnitude;
+            targetAngle = Mathf.Clamp(
+                -Mathf.Atan2(localAim.y, Mathf.Max(0.001f, horizontal)) * Mathf.Rad2Deg,
+                minAngle,
+                maxAngle);
+            return;
+        }
+
+        if (tankMotor != null && !tankMotor.usePlayerInput)
+            return;
+
         float mouseY =
             Input.GetAxisRaw("Mouse Y");
 

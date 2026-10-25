@@ -27,7 +27,7 @@ public class BaseInventory : MonoBehaviour
     // ================= ADICIONAR =================
     public void AddResource(ResourceType type, int amount)
     {
-        if (type == ResourceType.None)
+        if (type == ResourceType.None || amount <= 0)
             return;
 
         if (!resources.ContainsKey(type))
@@ -39,30 +39,26 @@ public class BaseInventory : MonoBehaviour
 
         Debug.Log($"📦 Base recebeu {amount} de {type}");
         // ================= UNLOCK TANK =================
-if (type == ResourceType.Steel)
-{
-    Team baseOwner = Team.Neutral;
+        if (type == ResourceType.Steel && GameManager.Instance != null)
+        {
+            CaptureTriggerAdvanced capture =
+                GetComponent<CaptureTriggerAdvanced>() ??
+                GetComponentInParent<CaptureTriggerAdvanced>();
 
-    CaptureTriggerAdvanced capture =
-        GetComponent<CaptureTriggerAdvanced>();
+            Team baseOwner =
+                capture != null
+                ? capture.GetOwner()
+                : Team.Neutral;
 
-    if (capture != null)
-    {
-        baseOwner = capture.GetOwner();
-    }
+            if (baseOwner == Team.TeamA)
+                GameManager.Instance.teamATankUnlocked = true;
+            else if (baseOwner == Team.TeamB)
+                GameManager.Instance.teamBTankUnlocked = true;
+            else
+                return;
 
-    if (baseOwner == Team.TeamA)
-    {
-        GameManager.Instance.teamATankUnlocked = true;
-    }
-
-    if (baseOwner == Team.TeamB)
-    {
-        GameManager.Instance.teamBTankUnlocked = true;
-    }
-
-    Debug.Log("🛡️ Tank desbloqueado!");
-}
+            Debug.Log("🛡️ Tank desbloqueado!");
+        }
     }
     
 
@@ -119,6 +115,14 @@ if (type == ResourceType.Steel)
         UpdateDebugValues();
 
         Debug.Log($"🧱 Recurso removido: {type} -{amount}");
+    }
+
+    public void ClearResources()
+    {
+        resources[ResourceType.Steel] = 0;
+        resources[ResourceType.Oil] = 0;
+        UpdateDebugValues();
+        Debug.Log("Inventário da fábrica perdido.");
     }
 
     // ================= DEBUG =================

@@ -67,6 +67,8 @@ public class TankTracksMovement : MonoBehaviour
             CollisionDetectionMode.Continuous;
 
         rb.maxAngularVelocity = 2f;
+        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+                          RigidbodyConstraints.FreezeRotationZ;
 
         // =========================================
         // CENTER OF MASS
@@ -76,6 +78,10 @@ public class TankTracksMovement : MonoBehaviour
             rb.centerOfMass =
                 centerOfMass.localPosition;
         }
+        else
+        {
+            rb.centerOfMass = new Vector3(0f, -0.75f, 0f);
+        }
     }
 
     // =====================================================
@@ -83,6 +89,7 @@ public class TankTracksMovement : MonoBehaviour
     // =====================================================
     void FixedUpdate()
     {
+
         float forward =
             Input.GetAxis("Vertical");
 
@@ -173,7 +180,10 @@ public class TankTracksMovement : MonoBehaviour
                 rb.linearVelocity
             );
 
-        localVelocity.x *= 0.85f;
+        localVelocity.x *= 0.55f;
+
+        if (Mathf.Abs(forward) < 0.05f)
+            localVelocity.z *= 0.92f;
 
         rb.linearVelocity =
             transform.TransformDirection(

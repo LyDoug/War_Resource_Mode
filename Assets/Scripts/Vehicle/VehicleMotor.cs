@@ -15,14 +15,18 @@ public class VehicleMotor : VehicleMotorBase
 
     float moveInput;
     float turnInput;
+    float targetMoveInput;
+    float targetTurnInput;
+
+    [Header("Inertia")]
+    [Min(0.1f)] public float accelerationResponse = 2.25f;
+    [Min(0.1f)] public float brakingResponse = 4.5f;
 
     // =====================================================
     // AWAKE
     // =====================================================
-    void Awake()
+    protected override void Awake()
     {
-         protected override void Awake()
-       {
         base.Awake();
 
         rb = GetComponent<Rigidbody>();
@@ -36,9 +40,13 @@ public class VehicleMotor : VehicleMotorBase
             rb.mass = blueprint.mass;
         }
 
-        rb.linearDamping = 0.3f;
+        rb.linearDamping = 1.5f;
 
-        rb.angularDamping = 4f;
+        rb.angularDamping = 8f;
+
+        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+                          RigidbodyConstraints.FreezeRotationZ;
+        rb.maxAngularVelocity = 4f;
 
         rb.interpolation =
             RigidbodyInterpolation.Interpolate;
@@ -57,6 +65,29 @@ public class VehicleMotor : VehicleMotorBase
                     centerOfMass.position
                 );
         }
+        else
+        {
+            rb.centerOfMass = new Vector3(0f, -0.55f, 0f);
+        }
+
+        LiftTruckVisuals();
+    }
+
+    void LiftTruckVisuals()
+    {
+        // Keep the rigidbody and colliders where they are; only the truck
+        // mesh is raised slightly so its wheels no longer look half buried.
+        if (GetComponent<TruckCargo>() == null)
+            return;
+
+        const float visualLift = 0.32f;
+        foreach (Transform child in transform)
+        {
+            if (child.GetComponentInChildren<Renderer>(true) == null)
+                continue;
+            child.localPosition += Vector3.up * visualLift;
+        }
+    }
 
 
     // =====================================================
@@ -69,15 +100,10 @@ public class VehicleMotor : VehicleMotorBase
         // =====================================
         if (usePlayerInput)
         {
-            moveInput =
-                Input.GetAxis("Vertical");
-
-            turnInput =
-                Input.GetAxis("Horizontal");
+            targetMoveInput = Input.GetAxis("Vertical");
+            targetTurnInput = Input.GetAxis("Horizontal");
         }
     }
-       }
-
     // =====================================================
     // AI INPUT
     // =====================================================
@@ -86,11 +112,8 @@ public class VehicleMotor : VehicleMotorBase
         float turn
     )
     {
-        moveInput =
-            Mathf.Clamp(move, -1f, 1f);
-
-        turnInput =
-            Mathf.Clamp(turn, -1f, 1f);
+        targetMoveInput = Mathf.Clamp(move, -1f, 1f);
+        targetTurnInput = Mathf.Clamp(turn, -1f, 1f);
     }
 
     // =====================================================
@@ -102,6 +125,11 @@ public class VehicleMotor : VehicleMotorBase
         return; 
         if (blueprint == null)
             return;
+
+        float response = Mathf.Abs(targetMoveInput) < Mathf.Abs(moveInput)
+            ? brakingResponse : accelerationResponse;
+        moveInput = Mathf.MoveTowards(moveInput, targetMoveInput, response * Time.fixedDeltaTime);
+        turnInput = Mathf.MoveTowards(turnInput, targetTurnInput, 5f * Time.fixedDeltaTime);
 
         MoveVehicle();
 
@@ -125,6 +153,9 @@ public class VehicleMotor : VehicleMotorBase
             transform.forward *
             moveInput *
             blueprint.moveForce,
+            // Blueprint values (Jeep 85, Truck 75) were authored as
+            // accelerations. Using Force divided them by multi-ton masses,
+            // leaving vehicles able to turn but practically unable to move.
             ForceMode.Acceleration
         );
     }
@@ -172,7 +203,11 @@ public class VehicleMotor : VehicleMotorBase
             );
 
         // reduz drift lateral
-        localVelocity.x *= 0.85f;
+        localVelocity.x *= 0.55f;
+
+        // Rolling resistance keeps a released vehicle from gliding like ice.
+        if (Mathf.Abs(moveInput) < 0.05f)
+            localVelocity.z *= 0.92f;
 
         rb.linearVelocity =
             transform.TransformDirection(
@@ -188,10 +223,8 @@ public class VehicleMotor : VehicleMotorBase
         if (!CanMove())
         return;
 
-        rb.AddForce(
-            Vector3.down * 50f,
-            ForceMode.Acceleration
-        );
+        float speed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
+        rb.AddForce(Vector3.down * (100f + speed * 35f), ForceMode.Force);
     }
 
     // =====================================================
@@ -225,7 +258,5 @@ public class VehicleMotor : VehicleMotorBase
                 );
          }
         }
-
-    }      
 
 }

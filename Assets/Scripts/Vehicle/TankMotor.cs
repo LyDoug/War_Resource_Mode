@@ -19,6 +19,15 @@ public class TankMotor : VehicleMotorBase
 
     float moveInput;
     float turnInput;
+    float targetMoveInput;
+    float targetTurnInput;
+
+    [Header("Input")]
+    public bool usePlayerInput = true;
+
+    [Header("Inertia")]
+    [Min(0.1f)] public float accelerationResponse = 1.5f;
+    [Min(0.1f)] public float brakingResponse = 3.5f;
 
     // =====================================================
     // AWAKE
@@ -37,11 +46,17 @@ public class TankMotor : VehicleMotorBase
     // =====================================================
     void Update()
     {
-        moveInput =
-            Input.GetAxis("Vertical");
+        if (!usePlayerInput)
+            return;
 
-        turnInput =
-            Input.GetAxis("Horizontal");
+        targetMoveInput = Input.GetAxis("Vertical");
+        targetTurnInput = Input.GetAxis("Horizontal");
+    }
+
+    public void SetAIInput(float move, float turn)
+    {
+        targetMoveInput = Mathf.Clamp(move, -1f, 1f);
+        targetTurnInput = Mathf.Clamp(turn, -1f, 1f);
     }
 
     // =====================================================
@@ -51,6 +66,11 @@ public class TankMotor : VehicleMotorBase
     {
         if (!CanMove())
             return;
+
+        float response = Mathf.Abs(targetMoveInput) < Mathf.Abs(moveInput)
+            ? brakingResponse : accelerationResponse;
+        moveInput = Mathf.MoveTowards(moveInput, targetMoveInput, response * Time.fixedDeltaTime);
+        turnInput = Mathf.MoveTowards(turnInput, targetTurnInput, 3f * Time.fixedDeltaTime);
 
         Move();
 
@@ -72,15 +92,16 @@ public class TankMotor : VehicleMotorBase
 
         rb.angularDamping = 8f;
 
+        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+                          RigidbodyConstraints.FreezeRotationZ;
+        rb.maxAngularVelocity = 3f;
+
         rb.interpolation =
             RigidbodyInterpolation.Interpolate;
 
         rb.collisionDetectionMode =
             CollisionDetectionMode.Continuous;
 
-        rb.constraints =
-            RigidbodyConstraints.FreezeRotationX |
-            RigidbodyConstraints.FreezeRotationZ;
 
         if (centerOfMass != null)
         {
@@ -88,6 +109,10 @@ public class TankMotor : VehicleMotorBase
                 transform.InverseTransformPoint(
                     centerOfMass.position
                 );
+        }
+        else
+        {
+            rb.centerOfMass = new Vector3(0f, -0.75f, 0f);
         }
     }
 
@@ -181,7 +206,10 @@ public class TankMotor : VehicleMotorBase
                 rb.linearVelocity
             );
 
-        localVelocity.x *= sideGrip;
+        localVelocity.x *= Mathf.Min(sideGrip, 0.55f);
+
+        if (Mathf.Abs(moveInput) < 0.05f)
+            localVelocity.z *= 0.92f;
 
         rb.linearVelocity =
             transform.TransformDirection(

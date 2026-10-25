@@ -2,6 +2,122 @@ using UnityEngine;
 
 public class VehicleSpawnerFinal : MonoBehaviour
 {
+    public static System.Action<GameObject, GameObject> VehicleReplaced;
+
+    public static GameObject ReplaceWithLoadedTruck(GameObject oldVehicle, Team team, ResourceType resource)
+    {
+        VehicleSpawnerFinal[] spawners = FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None);
+        VehicleBlueprint truckBlueprint = null;
+        foreach (VehicleSpawnerFinal spawner in spawners)
+        {
+            if (spawner.availableBlueprints == null)
+                continue;
+            foreach (VehicleBlueprint blueprint in spawner.availableBlueprints)
+            {
+                if (blueprint != null && blueprint.role == VehicleRole.Truck && blueprint.prefab != null)
+                {
+                    truckBlueprint = blueprint;
+                    break;
+                }
+            }
+            if (truckBlueprint != null)
+                break;
+        }
+
+        if (truckBlueprint == null)
+        {
+            Debug.LogWarning("Nenhum blueprint de caminhão foi encontrado para a mina.");
+            return null;
+        }
+
+        // Leave the extraction point facing away from the Jeep's approach and
+        // outside the trigger/model, rather than creating a truck on top of it.
+        Quaternion exitRotation = oldVehicle.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+        Vector3 exitDirection = exitRotation * Vector3.forward;
+        Vector3 exitPosition = oldVehicle.transform.position + exitDirection * 8f;
+        if (Physics.Raycast(exitPosition + Vector3.up * 8f, Vector3.down, out RaycastHit groundHit, 16f))
+            exitPosition.y = groundHit.point.y + 0.15f;
+        GameObject truck = Instantiate(truckBlueprint.prefab, exitPosition, exitRotation);
+        TeamMember member = truck.GetComponentInChildren<TeamMember>();
+        if (member != null)
+            member.SetTeam(team);
+        TruckCargo cargo = truck.GetComponentInChildren<TruckCargo>();
+        if (cargo != null)
+            cargo.Load(resource, 1);
+
+        if (GameManager.Instance != null && GameManager.Instance.PlayerTeam == team)
+        {
+            VehicleController[] controllers = FindObjectsByType<VehicleController>(FindObjectsSortMode.None);
+            foreach (VehicleController controller in controllers)
+                controller.SetControlled(false);
+
+            VehicleController truckController = truck.GetComponentInChildren<VehicleController>();
+            if (truckController != null)
+                truckController.SetControlled(true);
+
+            VehicleOrbitCamera camera = FindFirstObjectByType<VehicleOrbitCamera>();
+            if (camera != null)
+            {
+                Transform pivot = truck.transform.Find("CameraPivot");
+                camera.target = pivot != null ? pivot : truck.transform;
+            }
+        }
+
+        VehicleReplaced?.Invoke(oldVehicle, truck);
+        Destroy(oldVehicle);
+        return truck;
+    }
+
+    // Sends a loaded truck from a mine without replacing or taking control
+    // away from the player's Jeep.
+    public static GameObject SpawnAutoDeliveryTruck(GameObject jeep, Team team, ResourceType resource)
+    {
+        if (jeep == null)
+            return null;
+
+        VehicleBlueprint truckBlueprint = FindTruckBlueprint();
+        if (truckBlueprint == null)
+            return null;
+
+        Quaternion rotation = jeep.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+        Vector3 position = jeep.transform.position + (rotation * Vector3.forward) * 8f;
+        if (Physics.Raycast(position + Vector3.up * 8f, Vector3.down, out RaycastHit hit, 16f))
+            position.y = hit.point.y + 0.15f;
+
+        GameObject truck = Instantiate(truckBlueprint.prefab, position, rotation);
+        TeamMember member = truck.GetComponentInChildren<TeamMember>();
+        if (member != null)
+            member.SetTeam(team);
+        TruckCargo cargo = truck.GetComponentInChildren<TruckCargo>();
+        if (cargo != null)
+            cargo.Load(resource, 1);
+
+        VehicleMotor motor = truck.GetComponentInChildren<VehicleMotor>();
+        if (motor != null)
+            motor.usePlayerInput = false;
+        TankMotor tankMotor = truck.GetComponentInChildren<TankMotor>();
+        if (tankMotor != null)
+            tankMotor.usePlayerInput = false;
+
+        VehicleSimpleAI ai = truck.GetComponent<VehicleSimpleAI>() ?? truck.AddComponent<VehicleSimpleAI>();
+        AITruckDelivery delivery = truck.GetComponent<AITruckDelivery>() ?? truck.AddComponent<AITruckDelivery>();
+        delivery.Configure(ai, team);
+        return truck;
+    }
+
+    static VehicleBlueprint FindTruckBlueprint()
+    {
+        foreach (VehicleSpawnerFinal spawner in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))
+        {
+            if (spawner.availableBlueprints == null)
+                continue;
+            foreach (VehicleBlueprint blueprint in spawner.availableBlueprints)
+                if (blueprint != null && blueprint.role == VehicleRole.Truck && blueprint.prefab != null)
+                    return blueprint;
+        }
+        Debug.LogWarning("Nenhum blueprint de caminhão foi encontrado para a mina.");
+        return null;
+    }
     [Header("Spawner Settings")]
     public VehicleBlueprint[] availableBlueprints;
 
@@ -74,12 +190,6 @@ void Start()
             TrySpawn(VehicleRole.Jeep);
         }
 
-        if (Input.GetKeyDown(KeyCode.X))
-        {
-            Debug.Log("🚚 Spawn Truck");
-            TrySpawn(VehicleRole.Truck);
-        }
-
         if (Input.GetKeyDown(KeyCode.C))
         {
             Debug.Log("🛡️ Spawn Tank");
@@ -96,7 +206,7 @@ void Start()
     // =========================================================
     // TRY SPAWN
     // =========================================================
-    void TrySpawn(VehicleRole desiredRole)
+    public void TrySpawn(VehicleRole desiredRole)
     {
         if (availableBlueprints == null || availableBlueprints.Length == 0)
         {
@@ -110,23 +220,46 @@ void Start()
             return;
         }
 
+        if (!GameManager.Instance.MatchStarted)
+        {
+            Debug.Log("Confirme a seleção de equipe e blueprints antes de fabricar.");
+            return;
+        }
+
         // =====================================================
 // TEAM
 // =====================================================
-Team teamOwner = playerTeam;
+        Team teamOwner = GameManager.Instance.PlayerTeam;
 
-// se existir capture usa o dono da base
-if (baseCapture != null)
-{
-    Team capturedOwner =
-        baseCapture.GetOwner();
+        if (teamOwner == Team.Neutral)
+        {
+            Debug.Log("Escolha Azul [1] ou Vermelho [2] antes de fabricar.");
+            return;
+        }
 
-    // só substitui se NÃO for neutro
-    if (capturedOwner != Team.Neutral)
-    {
-        teamOwner = capturedOwner;
-    }
-}
+        Team baseOwner = baseCapture != null
+            ? baseCapture.GetOwner()
+            : playerTeam;
+
+        if (baseOwner == Team.Neutral)
+        {
+            Debug.Log("Essa estrutura precisa ser capturada antes de fabricar.");
+            return;
+        }
+
+        if (baseOwner != teamOwner)
+        {
+            Debug.Log("Essa estrutura pertence ao outro time.");
+            return;
+        }
+
+        bool isFactory = baseCapture != null && baseCapture.structureType == StructureType.Factory;
+        bool isMainBase = baseCapture == null || baseCapture.structureType == StructureType.MainBase;
+        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && !isFactory)
+        {
+            Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
+            return;
+        }
 
     // =====================================================
 // PROCURA BLUEPRINT
@@ -162,6 +295,16 @@ foreach (VehicleBlueprint bp in availableBlueprints)
 }
 
 Debug.Log("================================");
+        if (selected == null && isFactory)
+        {
+            foreach (VehicleSpawnerFinal other in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))
+            {
+                if (other.availableBlueprints == null) continue;
+                foreach (VehicleBlueprint bp in other.availableBlueprints)
+                    if (bp != null && bp.role == desiredRole && bp.prefab != null) { selected = bp; break; }
+                if (selected != null) break;
+            }
+        }
         // =====================================================
         // NÃO ENCONTROU
         // =====================================================
@@ -172,6 +315,35 @@ Debug.Log("================================");
                 desiredRole
             );
 
+            return;
+        }
+
+        if (!GameManager.Instance.IsBlueprintSelected(desiredRole))
+        {
+            Debug.Log("Este blueprint não foi selecionado para a partida.");
+            return;
+        }
+
+        if (desiredRole == VehicleRole.Jeep && !isMainBase)
+        {
+            Debug.Log("Jipes só podem ser obtidos na base principal.");
+            return;
+        }
+        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && !isFactory)
+        {
+            Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
+            return;
+        }
+        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && inventory == null)
+        {
+            Debug.Log("Esta fábrica não possui inventário local.");
+            return;
+        }
+        ResourceType requiredResource = desiredRole == VehicleRole.Tank ? ResourceType.Steel :
+            desiredRole == VehicleRole.Artillery ? ResourceType.Oil : ResourceType.None;
+        if (requiredResource != ResourceType.None && !inventory.ConsumeResource(requiredResource, 1))
+        {
+            Debug.Log("Falta " + requiredResource + " nesta fábrica.");
             return;
         }
 
@@ -195,7 +367,7 @@ Debug.Log("================================");
         // =====================================================
         // TANK
         // =====================================================
-        if (desiredRole == VehicleRole.Tank)
+        if (false && desiredRole == VehicleRole.Tank)
         {
             bool unlocked =
                 (teamOwner == Team.TeamA)
@@ -258,7 +430,7 @@ Debug.Log("================================");
         // =====================================================
         // SPAWN
         // =====================================================
-        if (desiredRole == VehicleRole.Artillery)
+        if (desiredRole == VehicleRole.Artillery && artilleryManager != null)
 {
     SpawnStaticArtillery(
         selected,
@@ -272,6 +444,27 @@ else
         teamOwner
     );
 }
+    }
+
+    public string GetSpawnStatus(VehicleRole role)
+    {
+        bool isFactory = baseCapture != null && baseCapture.structureType == StructureType.Factory;
+        bool isMainBase = baseCapture == null || baseCapture.structureType == StructureType.MainBase;
+        if (role == VehicleRole.Jeep)
+            return isMainBase ? "Jipe: disponível (sem custo)" : "Jipe: apenas na base principal";
+        if (role == VehicleRole.Tank)
+        {
+            if (GameManager.Instance != null && !GameManager.Instance.IsBlueprintSelected(role))
+                return "Tanque: blueprint não selecionado";
+            return !isFactory ? "Tanque: apenas na fábrica" : "Tanque: " + (inventory != null && inventory.HasResource(ResourceType.Steel, 1) ? "disponível" : "falta 1 aço");
+        }
+        if (role == VehicleRole.Artillery)
+        {
+            if (GameManager.Instance != null && !GameManager.Instance.IsBlueprintSelected(role))
+                return "SPG: blueprint não selecionado";
+            return !isFactory ? "SPG: apenas na fábrica" : "SPG: " + (inventory != null && inventory.HasResource(ResourceType.Oil, 1) ? "disponível" : "falta 1 óleo");
+        }
+        return "Caminhão: obtido apenas nas minas";
     }
 
      // =====================================================
@@ -333,9 +526,6 @@ if (vc != null)
     vc.SetControlled(true);
 }
 
-// =====================================
-// DEPLOYED AO NASCER
-// =====================================
 DeployableVehicle deploy =
     vehicle.GetComponentInChildren<DeployableVehicle>();
 
@@ -343,11 +533,7 @@ if (deploy != null)
 {
     deploy.canDeploy = true;
 
-    deploy.Deploy();
-
-    Debug.Log(
-        "🏹 SPG nasceu DEPLOYED"
-    );
+    deploy.DeployInstant();
 }
 else
 {
@@ -516,6 +702,12 @@ void SetupCamera(
         // POSIÇÃO
         // =====================================================
         Vector3 spawnPos = spawnPoint.position;
+        Quaternion spawnRotation = spawnPoint.rotation;
+
+        Vector3 outward = spawnPoint.position - transform.position;
+        outward.y = 0f;
+        if (outward.sqrMagnitude > 0.01f)
+            spawnRotation = Quaternion.LookRotation(outward.normalized, Vector3.up);
 
         if (
             Physics.Raycast(
@@ -535,13 +727,20 @@ void SetupCamera(
         currentVehicle = Instantiate(
             blueprint.prefab,
             spawnPos,
-            spawnPoint.rotation
+            spawnRotation
         );
 
         Debug.Log(
             "✅ VEÍCULO INSTANCIADO: " +
             currentVehicle.name
         );
+
+        foreach (MonoBehaviour weapon in currentVehicle.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            if (weapon != null && weapon.GetType().Name.Contains("TankGun") &&
+                weapon.gameObject.name.IndexOf("Sec", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                weapon.enabled = false;
+        }
 
         // =====================================================
         // TEAM

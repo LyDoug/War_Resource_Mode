@@ -54,13 +54,14 @@ public class TankGunBallistic : MonoBehaviour
 
     void Fire()
 {
+    Quaternion shotRotation = GetScreenCenterShotRotation();
     // 🔥 MUZZLE FLASH (FIX REAL)
     if (muzzleFlashPrefab)
     {   
         GameObject flash = Instantiate(
             muzzleFlashPrefab,
             firePoint.position,
-            firePoint.rotation,
+            shotRotation,
             firePoint // 🔥 parentado corretamente
         );
 
@@ -81,13 +82,39 @@ public class TankGunBallistic : MonoBehaviour
     ProjectileBallistic shell = Instantiate(
         shellPrefab,
         firePoint.position,
-        firePoint.rotation
+        shotRotation
     );
 
     shell.Init(shellSpeed, currentShellDamage);
 
     ApplyRecoil();
 }
+
+    Quaternion GetScreenCenterShotRotation()
+    {
+        Camera aimCamera = Camera.main;
+        if (aimCamera == null)
+            return firePoint.rotation;
+
+        Ray aimRay = aimCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        Vector3 target = aimRay.GetPoint(1000f);
+        float closestHit = float.PositiveInfinity;
+        Transform ownVehicle = transform.root;
+
+        foreach (RaycastHit hit in Physics.RaycastAll(aimRay, 1000f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider.transform.IsChildOf(ownVehicle) || hit.distance >= closestHit)
+                continue;
+
+            closestHit = hit.distance;
+            target = hit.point;
+        }
+
+        Vector3 direction = target - firePoint.position;
+        return direction.sqrMagnitude > 0.001f
+            ? Quaternion.LookRotation(direction.normalized, Vector3.up)
+            : firePoint.rotation;
+    }
 
 
     void ApplyRecoil()

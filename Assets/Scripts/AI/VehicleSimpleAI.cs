@@ -8,6 +8,7 @@ public class VehicleSimpleAI : MonoBehaviour
     public float waypointReachDistance = 10f;
 
     VehicleMotor motor;
+    TankMotor tankMotor;
 
     // =====================================================
     // START
@@ -22,6 +23,8 @@ public class VehicleSimpleAI : MonoBehaviour
             motor =
                 GetComponentInChildren<VehicleMotor>();
         }
+
+        tankMotor = GetComponentInChildren<TankMotor>();
     }
 
     // =====================================================
@@ -32,7 +35,7 @@ public class VehicleSimpleAI : MonoBehaviour
         if (target == null)
             return;
 
-        if (motor == null)
+        if (motor == null && tankMotor == null)
             return;
 
         Vector3 dir =
@@ -49,7 +52,7 @@ public class VehicleSimpleAI : MonoBehaviour
             waypointReachDistance
         )
         {
-            motor.SetAIInput(0f, 0f);
+            SetInput(0f, 0f);
             return;
         }
 
@@ -81,9 +84,14 @@ public class VehicleSimpleAI : MonoBehaviour
         // =====================================
         // ENVIA INPUT
         // =====================================
-        motor.SetAIInput(
-            move,
-            turn
-        );
+        SetInput(move, turn);
+    }
+
+    void SetInput(float move, float turn)
+    {
+        if (motor != null)
+            motor.SetAIInput(move, turn);
+        if (tankMotor != null)
+            tankMotor.SetAIInput(move, turn);
     }
 }

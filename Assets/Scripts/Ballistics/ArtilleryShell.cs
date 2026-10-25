@@ -134,6 +134,27 @@ public class ArtilleryShell : MonoBehaviour
         Destroy(gameObject);
     }
 
+    // Oil/steel mine interaction volumes are triggers, so artillery needs a
+    // trigger impact path in addition to its normal physical explosion path.
+    void OnTriggerEnter(Collider other)
+    {
+        if (exploded)
+            return;
+
+        ResourceNode mine = other.GetComponent<ResourceNode>();
+        if (mine == null)
+            return;
+
+        BaseDestructibleWithHealthVisual structure =
+            mine.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+        if (structure == null)
+            return;
+
+        exploded = true;
+        structure.TakeDamage(damage);
+        Destroy(gameObject);
+    }
+
     // =====================================================
     // DEBUG GIZMO
     // =====================================================
