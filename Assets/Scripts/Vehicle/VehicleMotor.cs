@@ -80,7 +80,7 @@ public class VehicleMotor : VehicleMotorBase
         if (GetComponent<TruckCargo>() == null)
             return;
 
-        const float visualLift = 0.32f;
+        const float visualLift = 0.60f;
         foreach (Transform child in transform)
         {
             if (child.GetComponentInChildren<Renderer>(true) == null)

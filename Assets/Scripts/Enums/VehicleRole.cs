@@ -3,5 +3,7 @@ public enum VehicleRole
     Jeep,
     Truck,
     Tank,
-    Artillery
+    Artillery,
+    APC,
+    UAV
 }

@@ -5,6 +5,7 @@ public class GameHUD : MonoBehaviour
 {
     [HideInInspector]
     public bool showSpawnPanel;
+    int loadoutStep;
 
     void Start()
     {
@@ -137,7 +138,7 @@ public class GameHUD : MonoBehaviour
 
         if (!GameManager.Instance.MatchStarted)
         {
-            DrawLoadoutScreen();
+            DrawLoadoutScreenNew();
             return;
         }
 
@@ -145,7 +146,7 @@ public class GameHUD : MonoBehaviour
 
         DrawBattleStatus();
         DrawIntelClipboard();
-        DrawProductionPopup();
+        DrawProductionPopupNew();
 
         if (!string.IsNullOrEmpty(ResourceNode.PlayerPrompt))
         {
@@ -368,6 +369,151 @@ public class GameHUD : MonoBehaviour
         if (GUI.Button(new Rect(Screen.width * 0.5f - 110f, 410f, 220f, 42f), "INICIAR PARTIDA"))
             GameManager.Instance.StartMatch();
         GUI.enabled = true;
+    }
+
+    void DrawLoadoutScreenNew()
+    {
+        const float width = 680f;
+        Rect panel = new Rect(Screen.width * 0.5f - width * 0.5f, 60f, width, 470f);
+        GUI.Box(panel, "PREPARACAO DA PARTIDA");
+
+        string[] steps = { "1  EQUIPE", "2  BLUEPRINTS", "3  CONFIRMAR" };
+        for (int i = 0; i < steps.Length; i++)
+        {
+            Color old = GUI.color;
+            GUI.color = i == loadoutStep ? new Color(0.3f, 0.7f, 1f) : Color.white;
+            GUI.Label(new Rect(panel.x + 35f + i * 205f, panel.y + 38f, 180f, 24f), steps[i],
+                new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold });
+            GUI.color = old;
+        }
+
+        Rect content = new Rect(panel.x + 38f, panel.y + 78f, panel.width - 76f, 290f);
+        if (loadoutStep == 0)
+            DrawTeamStep(content);
+        else if (loadoutStep == 1)
+            DrawBlueprintStep(content);
+        else
+            DrawConfirmStep(content);
+
+        if (loadoutStep > 0 && GUI.Button(new Rect(panel.x + 38f, panel.y + 400f, 130f, 38f), "VOLTAR"))
+            loadoutStep--;
+
+        if (loadoutStep < 2)
+        {
+            GUI.enabled = loadoutStep != 0 || GameManager.Instance.PlayerTeam != Team.Neutral;
+            if (GUI.Button(new Rect(panel.x + panel.width - 168f, panel.y + 400f, 130f, 38f), "PROXIMO"))
+                loadoutStep++;
+            GUI.enabled = true;
+        }
+        else
+        {
+            GUI.enabled = GameManager.Instance.SelectedFactoryBlueprintCount() == 2;
+            if (GUI.Button(new Rect(panel.x + panel.width - 208f, panel.y + 400f, 170f, 38f), "INICIAR PARTIDA"))
+                GameManager.Instance.StartMatch();
+            GUI.enabled = true;
+        }
+    }
+
+    void DrawTeamStep(Rect content)
+    {
+        GUI.Label(new Rect(content.x, content.y, content.width, 44f),
+            "Escolha a equipe. Ambos os times usam o mesmo conjunto inicial de unidades e recursos.",
+            new GUIStyle(GUI.skin.label) { wordWrap = true, alignment = TextAnchor.MiddleCenter, fontSize = 15 });
+
+        if (GUI.Button(new Rect(content.x + 35f, content.y + 76f, 255f, 70f), "TEAM AZUL\nDefesa e reconhecimento"))
+            GameManager.Instance.SelectPlayerTeam(Team.TeamA);
+        if (GUI.Button(new Rect(content.x + content.width - 290f, content.y + 76f, 255f, 70f), "TEAM VERMELHO\nDefesa e reconhecimento"))
+            GameManager.Instance.SelectPlayerTeam(Team.TeamB);
+
+        string selected = GameManager.Instance.PlayerTeam == Team.Neutral ? "Nenhum" : GetTeamName(GameManager.Instance.PlayerTeam);
+        GUI.Label(new Rect(content.x, content.y + 185f, content.width, 28f), "Equipe selecionada: " + selected,
+            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = 16 });
+        GUI.Label(new Rect(content.x + 40f, content.y + 228f, content.width - 80f, 45f),
+            "Unidade inicial: Jeep Scout (gratuito). Tanques, SPGs e apoio exigem fabrica capturada e recursos locais.",
+            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, wordWrap = true });
+    }
+
+    void DrawBlueprintStep(Rect content)
+    {
+        GUI.Label(new Rect(content.x, content.y, content.width, 38f),
+            "Marque os blueprints que sua equipe podera fabricar durante esta batalha.",
+            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 15 });
+
+        DrawBlueprintToggle(new Rect(content.x + 8f, content.y + 52f, 275f, 72f), VehicleRole.Tank,
+            "TANK", "1 ACO", "Blindado de linha de frente");
+        DrawBlueprintToggle(new Rect(content.x + content.width - 283f, content.y + 52f, 275f, 72f), VehicleRole.Artillery,
+            "SPG", "1 OLEO", "Artilharia de longo alcance");
+        DrawBlueprintToggle(new Rect(content.x + 8f, content.y + 142f, 275f, 72f), VehicleRole.APC,
+            "APC / IFV", "1 ACO", "Transporte de infantaria e captura");
+        DrawBlueprintToggle(new Rect(content.x + content.width - 283f, content.y + 142f, 275f, 72f), VehicleRole.UAV,
+            "UNIDADE UAV", "1 OLEO", "Plataforma de reconhecimento aereo");
+
+        GUI.Label(new Rect(content.x + 20f, content.y + 238f, content.width - 40f, 40f),
+            "Selecione exatamente duas blueprints de fabrica. Jeep Scout sempre fica disponivel na Base Principal.",
+            new GUIStyle(GUI.skin.label) { wordWrap = true, alignment = TextAnchor.MiddleCenter });
+    }
+
+    void DrawBlueprintToggle(Rect rect, VehicleRole blueprintRole, string name, string cost, string role)
+    {
+        GUI.Box(rect, string.Empty);
+        bool value = GameManager.Instance.IsBlueprintSelected(blueprintRole);
+        bool requested = GUI.Toggle(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), value, name + " - " + cost,
+            new GUIStyle(GUI.skin.toggle) { fontStyle = FontStyle.Bold });
+        if (requested != value)
+            GameManager.Instance.TrySetFactoryBlueprint(blueprintRole, requested);
+        GUI.Label(new Rect(rect.x + 30f, rect.y + 38f, rect.width - 42f, 22f), role,
+            new GUIStyle(GUI.skin.label) { fontSize = 12 });
+    }
+
+    void DrawConfirmStep(Rect content)
+    {
+        string team = GameManager.Instance.PlayerTeam == Team.Neutral ? "NENHUMA" : GetTeamName(GameManager.Instance.PlayerTeam);
+        GUI.Label(new Rect(content.x, content.y, content.width, 30f), "PRONTO PARA A BATALHA",
+            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = 18 });
+        GUI.Label(new Rect(content.x + 70f, content.y + 60f, content.width - 140f, 170f),
+            "EQUIPE: " + team + "\n\nBLUEPRINTS ATIVOS\n" +
+            "Jeep Scout - gratuito\n" +
+            "Tank - " + BlueprintState(GameManager.Instance.tankBlueprintSelected) + " (1 Aco)\n" +
+            "SPG - " + BlueprintState(GameManager.Instance.spgBlueprintSelected) + " (1 Oleo)\n" +
+            "APC / IFV - " + BlueprintState(GameManager.Instance.apcBlueprintSelected) + " (1 Aco)\n" +
+            "Unidade UAV - " + BlueprintState(GameManager.Instance.uavBlueprintSelected) + " (1 Oleo)",
+            new GUIStyle(GUI.skin.label) { fontSize = 14 });
+    }
+
+    string BlueprintState(bool selected) => selected ? "SELECIONADO" : "NAO SELECIONADO";
+
+    void DrawProductionPopupNew()
+    {
+        VehicleSpawnerFinal spawner = GameManager.Instance.ActiveSpawner;
+        if (spawner == null)
+            return;
+
+        bool factory = spawner.baseCapture != null && spawner.baseCapture.structureType == StructureType.Factory;
+        Rect panel = new Rect(Screen.width * 0.5f - 210f, Screen.height - 175f, 420f, 130f);
+        GUI.Box(panel, string.Empty);
+        string title = factory ? "FABRICA - PRODUCAO" : "BASE PRINCIPAL - PRODUCAO";
+        string steel = spawner.inventory == null ? "-" : spawner.inventory.GetResource(ResourceType.Steel).ToString();
+        string oil = spawner.inventory == null ? "-" : spawner.inventory.GetResource(ResourceType.Oil).ToString();
+        GUI.Label(new Rect(panel.x + 12f, panel.y + 10f, panel.width - 24f, 22f), title,
+            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = 16 });
+        GUI.Label(new Rect(panel.x + 24f, panel.y + 40f, panel.width - 48f, 76f),
+            "[1] JEEP SCOUT - gratuito\n" +
+            "[2] " + GetProductionSlotText(0, steel, oil, factory) + "\n" +
+            "[3] " + GetProductionSlotText(1, steel, oil, factory) +
+            (factory ? "\nESTOQUE LOCAL: ACO " + steel + " | OLEO " + oil : ""),
+            new GUIStyle(GUI.skin.label) { fontSize = 13 });
+    }
+
+    string GetProductionSlotText(int slot, string steel, string oil, bool factory)
+    {
+        VehicleRole role = GameManager.Instance.GetSelectedFactoryBlueprint(slot);
+        string name = role == VehicleRole.Tank ? "TANK" : role == VehicleRole.Artillery ? "SPG" :
+            role == VehicleRole.APC ? "APC / IFV" : "UNIDADE UAV";
+        bool needsSteel = role == VehicleRole.Tank || role == VehicleRole.APC;
+        string resource = needsSteel ? "1 ACO" : "1 OLEO";
+        string stock = needsSteel ? steel : oil;
+        return name + " - " + resource + " " +
+               (factory ? (stock == "0" ? "(SEM ESTOQUE)" : "(DISPONIVEL)") : "(SO FABRICA)");
     }
 
     void DrawEndScreen()

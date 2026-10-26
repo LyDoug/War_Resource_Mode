@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c816486a208beb4589d579fb5369d72, type: 3}
+  m_Name: UAV_Unit
+  m_EditorClassIdentifier: Assembly-CSharp::VehicleBlueprint
+  vehicleName: Unidade UAV
+  prefab: {fileID: 144952, guid: debe308a6be824b239c65a42b6c0f1a4, type: 3}
+  cost: 0
+  role: 5
+  moveForce: 0
+  turnTorque: 0
+  maxSpeed: 0
+  mass: 50
+  fireRate: 0
+  shellSpeed: 0
+  shellDamage: 0
+  recoilDistance: 0
+  cameraDistance: 8
+  cameraFOV: 60
+  costs:
+  - resource: 1
+    amount: 1

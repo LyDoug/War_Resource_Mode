@@ -19,6 +19,9 @@ public class SPGWeapon : MonoBehaviour
 
     [Header("Fire Rate")]
     public float reloadTime = 5f;
+    [Header("Area Damage")]
+    public float shellDamage = 260f;
+    public float explosionRadius = 10f;
 
     float reloadTimer;
 
@@ -81,6 +84,13 @@ public class SPGWeapon : MonoBehaviour
                 firePoint.position,
                 firePoint.rotation
             );
+
+        ArtilleryShell artilleryShell = shell.GetComponent<ArtilleryShell>();
+        if (artilleryShell != null)
+        {
+            artilleryShell.damage = shellDamage;
+            artilleryShell.explosionRadius = explosionRadius;
+        }
 
         Rigidbody rb =
             shell.GetComponent<Rigidbody>();

@@ -184,22 +184,22 @@ void Start()
         if (!isPlayerSpawner)
             return;
 
-        if (Input.GetKeyDown(KeyCode.Z))
+        if (Input.GetKeyDown(KeyCode.Alpha1))
         {
             Debug.Log("🚙 Spawn Jeep");
             TrySpawn(VehicleRole.Jeep);
         }
 
-        if (Input.GetKeyDown(KeyCode.C))
+        if (Input.GetKeyDown(KeyCode.Alpha2))
         {
             Debug.Log("🛡️ Spawn Tank");
-            TrySpawn(VehicleRole.Tank);
+            TrySpawn(GameManager.Instance.GetSelectedFactoryBlueprint(0));
         }
 
-        if (Input.GetKeyDown(KeyCode.V))
+        if (Input.GetKeyDown(KeyCode.Alpha3))
         {
             Debug.Log("🚀 Spawn Artillery");
-        TrySpawn(VehicleRole.Artillery);
+        TrySpawn(GameManager.Instance.GetSelectedFactoryBlueprint(1));
         }
     }
 
@@ -255,7 +255,7 @@ void Start()
 
         bool isFactory = baseCapture != null && baseCapture.structureType == StructureType.Factory;
         bool isMainBase = baseCapture == null || baseCapture.structureType == StructureType.MainBase;
-        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && !isFactory)
+        if (IsFactoryBlueprint(desiredRole) && !isFactory)
         {
             Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
             return;
@@ -305,6 +305,11 @@ Debug.Log("================================");
                 if (selected != null) break;
             }
         }
+        if (selected == null && isFactory)
+        {
+            foreach (VehicleBlueprint bp in Resources.LoadAll<VehicleBlueprint>("Blueprints"))
+                if (bp != null && bp.role == desiredRole && bp.prefab != null) { selected = bp; break; }
+        }
         // =====================================================
         // NÃO ENCONTROU
         // =====================================================
@@ -329,18 +334,18 @@ Debug.Log("================================");
             Debug.Log("Jipes só podem ser obtidos na base principal.");
             return;
         }
-        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && !isFactory)
+        if (IsFactoryBlueprint(desiredRole) && !isFactory)
         {
             Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
             return;
         }
-        if ((desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.Artillery) && inventory == null)
+        if (IsFactoryBlueprint(desiredRole) && inventory == null)
         {
             Debug.Log("Esta fábrica não possui inventário local.");
             return;
         }
-        ResourceType requiredResource = desiredRole == VehicleRole.Tank ? ResourceType.Steel :
-            desiredRole == VehicleRole.Artillery ? ResourceType.Oil : ResourceType.None;
+        ResourceType requiredResource = desiredRole == VehicleRole.Tank || desiredRole == VehicleRole.APC ? ResourceType.Steel :
+            desiredRole == VehicleRole.Artillery || desiredRole == VehicleRole.UAV ? ResourceType.Oil : ResourceType.None;
         if (requiredResource != ResourceType.None && !inventory.ConsumeResource(requiredResource, 1))
         {
             Debug.Log("Falta " + requiredResource + " nesta fábrica.");
@@ -467,6 +472,12 @@ else
         return "Caminhão: obtido apenas nas minas";
     }
 
+    static bool IsFactoryBlueprint(VehicleRole role)
+    {
+        return role == VehicleRole.Tank || role == VehicleRole.Artillery ||
+               role == VehicleRole.APC || role == VehicleRole.UAV;
+    }
+
      // =====================================================
         // SPAWN ARTILERY ZONE
         // =====================================================
@@ -498,6 +509,8 @@ void SpawnStaticArtillery(
             pos.spawnPoint.position,
             pos.spawnPoint.rotation
         );
+
+    ConfigureVehicleDurability(vehicle, VehicleRole.Artillery);
 
     // =====================================
     // REGISTRA POSIÇÃO
@@ -597,10 +610,10 @@ void SetupCamera(
         in vehicle.GetComponentsInChildren<Transform>()
     )
     {
-        if (t.name == "DriverView")
+        if (string.Equals(t.name, "DriverView", System.StringComparison.OrdinalIgnoreCase))
             cameraRig.driverView = t;
 
-        if (t.name == "GunView")
+        if (string.Equals(t.name, "GunView", System.StringComparison.OrdinalIgnoreCase))
             cameraRig.gunView = t;
     }
 
@@ -618,6 +631,81 @@ void SetupCamera(
     // =========================================================
     // SPAWN VEHICLE
     // =========================================================
+    void EnsureRuntimeVehicleComponents(GameObject vehicle, VehicleBlueprint blueprint)
+    {
+        if (vehicle.GetComponentInChildren<VehicleController>() != null)
+            return;
+
+        Renderer[] renderers = vehicle.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0)
+            return;
+
+        Bounds bounds = renderers[0].bounds;
+        for (int index = 1; index < renderers.Length; index++)
+            bounds.Encapsulate(renderers[index].bounds);
+
+        // Unity components can be "fake null" after a prefab override. Do
+        // not use ?? here: it only checks the CLR reference and can return a
+        // destroyed BoxCollider, causing the MissingComponentException.
+        BoxCollider collider = vehicle.GetComponent<BoxCollider>();
+        if (collider == null)
+            collider = vehicle.AddComponent<BoxCollider>();
+        collider.center = vehicle.transform.InverseTransformPoint(bounds.center);
+        Vector3 localSize = vehicle.transform.InverseTransformVector(bounds.size);
+        collider.size = new Vector3(Mathf.Abs(localSize.x), Mathf.Abs(localSize.y), Mathf.Abs(localSize.z));
+
+        Rigidbody body = vehicle.GetComponent<Rigidbody>();
+        if (body == null)
+            body = vehicle.AddComponent<Rigidbody>();
+        body.mass = blueprint.mass;
+        body.linearDamping = 1.5f;
+        body.angularDamping = 8f;
+        body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
+        TeamMember teamMember = vehicle.GetComponent<TeamMember>();
+        if (teamMember == null)
+            teamMember = vehicle.AddComponent<TeamMember>();
+        VehicleMotor motor = vehicle.GetComponent<VehicleMotor>();
+        if (motor == null)
+            motor = vehicle.AddComponent<VehicleMotor>();
+        motor.blueprint = blueprint;
+        VehicleController controller = vehicle.GetComponent<VehicleController>();
+        if (controller == null)
+            controller = vehicle.AddComponent<VehicleController>();
+    }
+
+    void ConfigureRoleEquipment(GameObject vehicle, VehicleBlueprint blueprint)
+    {
+        // APC/IFV receives its own light autocannon. It never borrows a
+        // GunPoint from the previously controlled Jeep or another vehicle.
+        if (blueprint.role != VehicleRole.APC)
+            return;
+
+        IFVAutocannon gun = vehicle.GetComponent<IFVAutocannon>();
+        if (gun == null)
+            gun = vehicle.AddComponent<IFVAutocannon>();
+        gun.ConfigureFromVehicleBounds();
+
+        IFVTurretController turret = vehicle.GetComponent<IFVTurretController>();
+        if (turret == null)
+            turret = vehicle.AddComponent<IFVTurretController>();
+        turret.Configure(gun.firePoint);
+    }
+
+    void ConfigureVehicleDurability(GameObject vehicle, VehicleRole role)
+    {
+        Health health = vehicle.GetComponentInChildren<Health>();
+        if (health == null)
+            health = vehicle.AddComponent<Health>();
+
+        float maxHealth = role == VehicleRole.Tank ? 350f :
+            role == VehicleRole.Artillery ? 140f :
+            role == VehicleRole.APC ? 150f :
+            role == VehicleRole.Truck ? 100f :
+            role == VehicleRole.UAV ? 45f : 60f;
+        health.ConfigureMaxHealth(maxHealth);
+    }
+
     void SpawnVehicle(
         VehicleBlueprint blueprint,
         Team team
@@ -670,6 +758,7 @@ void SetupCamera(
                 if (
                     scriptName.Contains("Controller") ||
                     scriptName.Contains("Weapon") ||
+                    scriptName.Contains("Gun") ||
                     scriptName.Contains("Turret")
                 )
                 {
@@ -729,6 +818,10 @@ void SetupCamera(
             spawnPos,
             spawnRotation
         );
+
+        EnsureRuntimeVehicleComponents(currentVehicle, blueprint);
+        ConfigureVehicleDurability(currentVehicle, blueprint.role);
+        ConfigureRoleEquipment(currentVehicle, blueprint);
 
         Debug.Log(
             "✅ VEÍCULO INSTANCIADO: " +
@@ -868,12 +961,12 @@ void SetupCamera(
             in currentVehicle.GetComponentsInChildren<Transform>()
         )
         {
-            if (t.name == "DriverView")
+            if (string.Equals(t.name, "DriverView", System.StringComparison.OrdinalIgnoreCase))
             {
                 cameraRig.driverView = t;
             }
 
-            if (t.name == "GunView")
+            if (string.Equals(t.name, "GunView", System.StringComparison.OrdinalIgnoreCase))
             {
                 cameraRig.gunView = t;
             }

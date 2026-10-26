@@ -13,8 +13,10 @@ public class GameManager : MonoBehaviour
     public bool MatchStarted { get; private set; }
     public bool GameEnded => gameEnded;
     public Team WinningTeam { get; private set; } = Team.Neutral;
-    public bool tankBlueprintSelected = true;
-    public bool spgBlueprintSelected = true;
+    public bool tankBlueprintSelected = false;
+    public bool spgBlueprintSelected = false;
+    public bool apcBlueprintSelected = false;
+    public bool uavBlueprintSelected = false;
     public VehicleSpawnerFinal ActiveSpawner { get; private set; }
 
     [Header("Tickets")]
@@ -105,6 +107,13 @@ public class GameManager : MonoBehaviour
         }
 
         Instance = this;
+
+        // Every new battle starts with an empty factory loadout. Players must
+        // explicitly choose the two blueprints they want before StartMatch.
+        tankBlueprintSelected = false;
+        spgBlueprintSelected = false;
+        apcBlueprintSelected = false;
+        uavBlueprintSelected = false;
 
         // Build the neutral objective layout before the structures run Start.
         // The authored objects are templates; the runtime map is mirrored so
@@ -225,13 +234,69 @@ public class GameManager : MonoBehaviour
     {
         return role == VehicleRole.Jeep || role == VehicleRole.Truck ||
                (role == VehicleRole.Tank && tankBlueprintSelected) ||
-               (role == VehicleRole.Artillery && spgBlueprintSelected);
+               (role == VehicleRole.Artillery && spgBlueprintSelected) ||
+               (role == VehicleRole.APC && apcBlueprintSelected) ||
+               (role == VehicleRole.UAV && uavBlueprintSelected);
+    }
+
+    public int SelectedFactoryBlueprintCount()
+    {
+        int count = 0;
+        if (tankBlueprintSelected) count++;
+        if (spgBlueprintSelected) count++;
+        if (apcBlueprintSelected) count++;
+        if (uavBlueprintSelected) count++;
+        return count;
+    }
+
+    public bool TrySetFactoryBlueprint(VehicleRole role, bool selected)
+    {
+        bool current = IsBlueprintSelected(role);
+        if (current == selected)
+            return true;
+
+        if (selected && SelectedFactoryBlueprintCount() >= 2)
+        {
+            Debug.Log("Escolha no maximo duas blueprints para as fabricas.");
+            return false;
+        }
+
+        switch (role)
+        {
+            case VehicleRole.Tank: tankBlueprintSelected = selected; break;
+            case VehicleRole.Artillery: spgBlueprintSelected = selected; break;
+            case VehicleRole.APC: apcBlueprintSelected = selected; break;
+            case VehicleRole.UAV: uavBlueprintSelected = selected; break;
+            default: return false;
+        }
+        return true;
+    }
+
+    public VehicleRole GetSelectedFactoryBlueprint(int slot)
+    {
+        VehicleRole[] order = { VehicleRole.Tank, VehicleRole.Artillery, VehicleRole.APC, VehicleRole.UAV };
+        int selectedIndex = 0;
+        foreach (VehicleRole role in order)
+        {
+            if (!IsBlueprintSelected(role))
+                continue;
+            if (selectedIndex == slot)
+                return role;
+            selectedIndex++;
+        }
+        return VehicleRole.Jeep;
     }
 
     public void StartMatch()
     {
         if (playerTeam == Team.Neutral || MatchStarted)
             return;
+
+        if (SelectedFactoryBlueprintCount() != 2)
+        {
+            Debug.Log("Escolha exatamente duas blueprints para as fabricas antes de iniciar.");
+            return;
+        }
 
         MatchStarted = true;
 

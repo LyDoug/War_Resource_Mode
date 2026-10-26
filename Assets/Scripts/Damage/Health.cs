@@ -10,6 +10,12 @@ public class Health : MonoBehaviour
         currentHealth = maxHealth;
     }
 
+    public void ConfigureMaxHealth(float value)
+    {
+        maxHealth = value;
+        currentHealth = value;
+    }
+
     public void TakeDamage(float damage)
     {
         currentHealth -= damage;
