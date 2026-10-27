@@ -5,6 +5,8 @@ public class TankGunBallistic : MonoBehaviour
     [Header("References")]
     public Transform firePoint;
     public ProjectileBallistic shellPrefab;
+    [Tooltip("Dispara com Espaço em vez do clique esquerdo.")]
+    public bool useSecondaryInput;
 
     [Header("Weapon Stats")]
     public float fireRate = 5f;          // tiros por segundo
@@ -20,10 +22,14 @@ public class TankGunBallistic : MonoBehaviour
     [Header("VFX")]
     public GameObject muzzleFlashPrefab;
     public float muzzleFlashDuration = 1.5f;
+    [Range(0.1f, 2f)] public float muzzleFlashScale = 1f;
 
     float nextFireTime;
     Vector3 cannonInitialLocalPos;
     bool isRecoiling;
+
+    public float CooldownRemaining => Mathf.Max(0f, nextFireTime - Time.time);
+    public float CooldownDuration => fireRate <= 0f ? 0f : 1f / fireRate;
 
     void Start()
     {
@@ -45,7 +51,13 @@ public class TankGunBallistic : MonoBehaviour
 
     void HandleFire()
     {
-        if (Input.GetMouseButton(0) && Time.time >= nextFireTime)
+        if (!VehicleController.IsLocallyControlled(this))
+            return;
+
+        bool requested = useSecondaryInput
+            ? Input.GetKey(KeyCode.Space)
+            : Input.GetMouseButton(0);
+        if (requested && Time.time >= nextFireTime)
         {
             Fire();
             nextFireTime = Time.time + (1f / fireRate);
@@ -67,7 +79,7 @@ public class TankGunBallistic : MonoBehaviour
 
         flash.transform.localPosition = Vector3.zero;
         flash.transform.localRotation = Quaternion.identity;
-        flash.transform.localScale = Vector3.one;
+        flash.transform.localScale = Vector3.one * muzzleFlashScale;
 
         ParticleSystem[] particles = flash.GetComponentsInChildren<ParticleSystem>();
         foreach (ParticleSystem ps in particles)
@@ -86,6 +98,10 @@ public class TankGunBallistic : MonoBehaviour
     );
 
     shell.Init(shellSpeed, currentShellDamage);
+
+    // The main shell must leave the cannon without colliding with another
+    // collider on the firing tank (hull, turret or tracks).
+    shell.IgnoreVehicleCollisions(transform.root);
 
     ApplyRecoil();
 }

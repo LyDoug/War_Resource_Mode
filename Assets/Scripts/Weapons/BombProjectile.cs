@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -77,18 +78,23 @@ public class BombProjectile : MonoBehaviour
         // Dano em área
         Collider[] hits = Physics.OverlapSphere(transform.position, explosionRadius);
 
+        HashSet<BaseDestructibleWithHealthVisual> damagedStructures = new HashSet<BaseDestructibleWithHealthVisual>();
+        HashSet<Health> damagedVehicles = new HashSet<Health>();
         foreach (Collider hit in hits)
         {
             // Base
             BaseDestructibleWithHealthVisual baseHealth =
-                hit.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+                BaseDestructibleWithHealthVisual.FindInHierarchy(hit);
 
-            if (baseHealth != null)
+            if (baseHealth != null && damagedStructures.Add(baseHealth))
             {
                 baseHealth.TakeDamage(damage);
+                continue;
             }
 
-            // Futuro: outros alvos (tanques, unidades, etc.)
+            Health vehicleHealth = Health.FindInHierarchy(hit);
+            if (vehicleHealth != null && damagedVehicles.Add(vehicleHealth))
+                vehicleHealth.TakeDamage(damage);
         }
 
         Destroy(gameObject);

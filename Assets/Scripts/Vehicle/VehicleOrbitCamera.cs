@@ -45,6 +45,11 @@ public class VehicleOrbitCamera : MonoBehaviour
     float yaw;
     float pitch;
     float distance = 5f;
+    bool wasIndirectFireView;
+
+    bool HasSPGTarget => target != null && target.GetComponentInChildren<SPGWeapon>(true) != null;
+    bool IsIndirectFireView => target != null &&
+        target.GetComponentInChildren<SPGWeapon>(true) is SPGWeapon spg && spg.FireComputerActive;
 
     // =====================================================
     // START
@@ -74,7 +79,9 @@ public class VehicleOrbitCamera : MonoBehaviour
         // =====================================
         // GUN VIEW
         // =====================================
-        if (Input.GetKeyDown(KeyCode.E))
+        // An SPG reserves Q for its fire computer. E remains the normal
+        // GunView toggle for every other vehicle.
+        if (Input.GetKeyDown(KeyCode.E) && !TruckCargo.HasPlayerInteractionPrompt && !HasSPGTarget)
         {
             gunMode = !gunMode;
 
@@ -94,6 +101,11 @@ public class VehicleOrbitCamera : MonoBehaviour
         if (!target)
             return;
 
+        bool indirectFireView = IsIndirectFireView;
+        if (indirectFireView && !wasIndirectFireView)
+            pitch = 67f;
+        wasIndirectFireView = indirectFireView;
+
         // =====================================
         // INPUT
         // =====================================
@@ -110,7 +122,7 @@ public class VehicleOrbitCamera : MonoBehaviour
         // =====================================
         // AUTO ALIGN
         // =====================================
-        if (autoAlign && !gunMode)
+        if (autoAlign && !gunMode && !indirectFireView)
         {
             bool movingMouse =
                 Mathf.Abs(mouseX) > 0.01f ||
@@ -173,6 +185,22 @@ public class VehicleOrbitCamera : MonoBehaviour
                 yaw,
                 0f
             );
+
+        if (indirectFireView)
+        {
+            Vector3 horizontalBack = Quaternion.Euler(0f, yaw, 0f) * Vector3.back;
+            Vector3 indirectCameraPosition = target.position + Vector3.up * 32f + horizontalBack * 12f;
+
+            cameraTransform.position = Vector3.Lerp(
+                cameraTransform.position,
+                indirectCameraPosition,
+                Time.deltaTime * 8f);
+            cameraTransform.rotation = Quaternion.Lerp(
+                cameraTransform.rotation,
+                rotation,
+                Time.deltaTime * 10f);
+            return;
+        }
 
         transform.rotation = Quaternion.Lerp(
             transform.rotation,

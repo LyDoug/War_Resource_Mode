@@ -8,12 +8,15 @@ public class IFVTurretController : MonoBehaviour
     public float pitchSpeed = 110f;
     public float minPitch = -12f;
     public float maxPitch = 38f;
+    public bool rearArcOnly;
+    [Range(0f, 180f)] public float rearArcLimit = 90f;
 
     Transform turretYaw;
     Transform gunPitch;
     Quaternion gunInitialLocalRotation;
 
-    public void Configure(Transform firePoint)
+    public void Configure(Transform firePoint, bool attachGunView = false, bool rearFacingGunView = false,
+        bool restrictToRearArc = false)
     {
         turretYaw = FindChild("Turret_09_Prefeb");
         if (turretYaw == null)
@@ -28,7 +31,25 @@ public class IFVTurretController : MonoBehaviour
         // Firepoint was authored on the APC body. Parent it to the cannon so
         // the muzzle follows both yaw and pitch without changing its position.
         if (firePoint != null && !firePoint.IsChildOf(gunPitch))
+        {
             firePoint.SetParent(gunPitch, true);
+            firePoint.localRotation = Quaternion.identity;
+        }
+
+        rearArcOnly = restrictToRearArc;
+
+        if (!attachGunView)
+            return;
+
+        Transform gunView = FindChild("GunView");
+        if (gunView == null || gunView.IsChildOf(turretYaw))
+            return;
+
+        // The view rides with the complete turret, keeping its authored eye
+        // position while following every horizontal movement of the mount.
+        gunView.SetParent(turretYaw, true);
+        if (rearFacingGunView)
+            gunView.localRotation = Quaternion.identity;
     }
 
     void Update()
@@ -36,15 +57,23 @@ public class IFVTurretController : MonoBehaviour
         if (turretYaw == null || gunPitch == null || Camera.main == null)
             return;
 
-        VehicleMotor motor = GetComponent<VehicleMotor>();
-        if (motor != null && !motor.usePlayerInput)
+        if (!VehicleController.IsLocallyControlled(this))
             return;
 
         Vector3 aim = Camera.main.transform.forward;
         Vector3 flatAim = Vector3.ProjectOnPlane(aim, Vector3.up);
         if (flatAim.sqrMagnitude > 0.001f)
         {
-            Quaternion desiredYaw = Quaternion.LookRotation(flatAim.normalized, Vector3.up);
+            Vector3 desiredDirection = flatAim.normalized;
+            if (rearArcOnly)
+            {
+                Vector3 rearDirection = -transform.root.forward;
+                float rearOffset = Vector3.SignedAngle(rearDirection, desiredDirection, Vector3.up);
+                rearOffset = Mathf.Clamp(rearOffset, -rearArcLimit, rearArcLimit);
+                desiredDirection = Quaternion.AngleAxis(rearOffset, Vector3.up) * rearDirection;
+            }
+
+            Quaternion desiredYaw = Quaternion.LookRotation(desiredDirection, Vector3.up);
             turretYaw.rotation = Quaternion.RotateTowards(turretYaw.rotation, desiredYaw, yawSpeed * Time.deltaTime);
         }
 

@@ -14,7 +14,7 @@ public class BalancedBattlefieldLayout : MonoBehaviour
 
     [Header("Layout")]
     [Min(20f)] public float minimumStructureSpacing = 50f;
-    [Range(0.1f, 0.48f)] public float mapUsage = 0.34f;
+    [Range(0.1f, 0.48f)] public float mapUsage = 0.40f;
 
     readonly List<Vector3> occupiedPositions = new List<Vector3>();
     bool built;
@@ -27,7 +27,7 @@ public class BalancedBattlefieldLayout : MonoBehaviour
 
         FindBaseAxis(out Vector3 center, out Vector3 teamAxis, out float baseDistance);
         Vector3 sideAxis = Vector3.Cross(Vector3.up, teamAxis).normalized;
-        float reach = Mathf.Clamp(baseDistance * mapUsage, 70f, 130f);
+        float reach = Mathf.Clamp(baseDistance * mapUsage, 90f, 180f);
 
         foreach (TeamMember member in FindObjectsByType<TeamMember>(FindObjectsSortMode.None))
             if (member.gameObject.name.IndexOf("MainBase", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -37,6 +37,12 @@ public class BalancedBattlefieldLayout : MonoBehaviour
         CaptureTriggerAdvanced city = FindTemplate(StructureType.City, ResourceType.None);
         CaptureTriggerAdvanced steel = FindTemplate(StructureType.Mine, ResourceType.Steel);
         CaptureTriggerAdvanced oil = FindTemplate(StructureType.Mine, ResourceType.Oil);
+
+        // Legacy mine templates keep their visible model and capture trigger
+        // as separate scene roots. Group them before cloning/placing so every
+        // runtime copy, destruction and respawn moves the complete mine.
+        EnsureMineCompoundRoot(steel);
+        EnsureMineCompoundRoot(oil);
 
         // Mines are placed first, so the resource economy always has the
         // best-separated positions. Other objectives fill the remaining lanes.
@@ -97,6 +103,26 @@ public class BalancedBattlefieldLayout : MonoBehaviour
         }
     }
 
+    void EnsureMineCompoundRoot(CaptureTriggerAdvanced capture)
+    {
+        if (capture == null || capture.structureType != StructureType.Mine || capture.resourceNode == null)
+            return;
+
+        Transform captureRoot = GetStructureRoot(capture);
+        Transform visualRoot = capture.resourceNode.transform.root;
+        if (captureRoot == visualRoot)
+            return;
+
+        // Both source roots preserve their world transforms while becoming
+        // children of a single gameplay root. Prefab cloning now remaps the
+        // ResourceNode reference to the clone rather than the original mine.
+        GameObject group = new GameObject(capture.resourceNode.resourceType + " Mine Structure");
+        group.transform.position = captureRoot.position;
+        group.transform.rotation = captureRoot.rotation;
+        captureRoot.SetParent(group.transform, true);
+        visualRoot.SetParent(group.transform, true);
+    }
+
     Vector3 GetMirroredOffset(Vector3 teamAxis, Vector3 sideAxis, float reach, int lane, int pair)
     {
         // Each type receives its own mirrored lane, keeping its capture rings
@@ -145,7 +171,11 @@ public class BalancedBattlefieldLayout : MonoBehaviour
             root.gameObject.AddComponent<BaseDestructibleWithHealthVisual>();
         health.endsMatchOnDestruction = false;
         health.respawnDelay = 5f;
-        health.maxHealth = 200f;
+        float maxHealth = capture.structureType == StructureType.Factory ? 800f :
+            capture.structureType == StructureType.City ? 650f : 450f;
+        float armor = capture.structureType == StructureType.Factory ? 0.35f :
+            capture.structureType == StructureType.City ? 0.30f : 0.25f;
+        health.ConfigureDurability(maxHealth, armor);
         capture.baseScript = health;
     }
 

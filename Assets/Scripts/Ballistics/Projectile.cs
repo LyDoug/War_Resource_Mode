@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Rigidbody))]
 public class ProjectileBallistic : MonoBehaviour
@@ -14,6 +15,8 @@ public class ProjectileBallistic : MonoBehaviour
     Rigidbody rb;
 
     bool hasImpacted;
+    Vector3 previousPosition;
+    readonly HashSet<Collider> ignoredColliders = new HashSet<Collider>();
 
     // =========================================================
     // AWAKE
@@ -21,6 +24,7 @@ public class ProjectileBallistic : MonoBehaviour
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        previousPosition = transform.position;
     }
 
     // =========================================================
@@ -35,12 +39,58 @@ public class ProjectileBallistic : MonoBehaviour
 
         rb.linearVelocity =
             transform.forward * speed;
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        previousPosition = transform.position;
+    }
+
+    public void IgnoreVehicleCollisions(Transform vehicleRoot)
+    {
+        if (vehicleRoot == null)
+            return;
+
+        foreach (Collider ownCollider in vehicleRoot.GetComponentsInChildren<Collider>())
+        {
+            ignoredColliders.Add(ownCollider);
+            foreach (Collider shellCollider in GetComponentsInChildren<Collider>())
+                Physics.IgnoreCollision(ownCollider, shellCollider);
+        }
+    }
+
+    void Update()
+    {
+        if (hasImpacted)
+            return;
+
+        Vector3 currentPosition = transform.position;
+        Vector3 travel = currentPosition - previousPosition;
+        float distance = travel.magnitude;
+        if (distance > 0.001f)
+        {
+            foreach (RaycastHit hit in Physics.RaycastAll(previousPosition, travel / distance, distance,
+                         Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                if (ignoredColliders.Contains(hit.collider))
+                    continue;
+
+                HandleImpact(hit.collider, hit.point, hit.normal);
+                break;
+            }
+        }
+        previousPosition = currentPosition;
     }
 
     // =========================================================
     // COLLISION
     // =========================================================
     void OnCollisionEnter(Collision collision)
+    {
+        if (hasImpacted)
+            return;
+
+        HandleImpact(collision.collider, collision.contacts[0].point, collision.contacts[0].normal);
+    }
+
+    void HandleImpact(Collider collider, Vector3 point, Vector3 normal)
     {
         if (hasImpacted)
             return;
@@ -56,11 +106,11 @@ public class ProjectileBallistic : MonoBehaviour
                 Instantiate(impactEffectPrefab);
 
             impact.transform.position =
-                collision.contacts[0].point;
+                point;
 
             impact.transform.rotation =
                 Quaternion.LookRotation(
-                    collision.contacts[0].normal
+                    normal
                 );
 
             impact.transform.localScale =
@@ -76,7 +126,7 @@ public class ProjectileBallistic : MonoBehaviour
         // DAMAGE STRUCTURE
         // =====================================================
         BaseDestructibleWithHealthVisual baseScript =
-            collision.collider.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+            BaseDestructibleWithHealthVisual.FindInHierarchy(collider);
 
         if (baseScript != null)
         {
@@ -90,8 +140,7 @@ public class ProjectileBallistic : MonoBehaviour
         // =====================================================
         // DAMAGE VEHICLE/PLAYER
         // =====================================================
-        Health health =
-            collision.collider.GetComponentInParent<Health>();
+        Health health = Health.FindInHierarchy(collider);
 
         if (health != null)
         {
@@ -116,7 +165,7 @@ public class ProjectileBallistic : MonoBehaviour
             return;
 
         BaseDestructibleWithHealthVisual structure =
-            mine.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+            BaseDestructibleWithHealthVisual.FindInHierarchy(other);
         if (structure == null)
             return;
 

@@ -10,8 +10,6 @@ public class ResourceNode : MonoBehaviour
 
     [Header("Jeep Collection")]
     public static string PlayerPrompt { get; private set; }
-    static ResourceNode promptedNode;
-    static GameObject promptedJeep;
     Transform extractionMarker;
     LineRenderer markerRenderer;
     CaptureTriggerAdvanced captureZone;
@@ -70,23 +68,8 @@ public class ResourceNode : MonoBehaviour
             extractionMarker.position = GetRingCenter() + Vector3.up * 0.1f;
         UpdateCooldownBar();
 
-        if (promptedNode != this || promptedJeep == null)
-            return;
-
-        if (!Input.GetKeyDown(KeyCode.F) && !Input.GetKeyDown(KeyCode.G))
-            return;
-
-        TeamMember member = promptedJeep.GetComponentInChildren<TeamMember>();
-        if (member == null || member.team != owner)
-            return;
-
-        GameObject jeep = promptedJeep;
-        ClearPrompt();
-        if (Input.GetKeyDown(KeyCode.G))
-            VehicleSpawnerFinal.SpawnAutoDeliveryTruck(jeep, member.team, resourceType);
-        else
-            VehicleSpawnerFinal.ReplaceWithLoadedTruck(jeep, member.team, resourceType);
-        BeginTruckCooldown();
+        // Extraction is automatic. A friendly vehicle entering a ready mine
+        // dispatches a loaded truck while keeping the vehicle under control.
     }
 
     void OnTriggerEnter(Collider other)
@@ -113,36 +96,13 @@ public class ResourceNode : MonoBehaviour
             GameManager.Instance == null)
             return;
 
-        // AI uses exactly the same extraction rule, but has no keyboard input.
-        if (member.team != GameManager.Instance.PlayerTeam)
-        {
-            // A scout stays at the mine after sending a delivery truck. Do
-            // not send another one until that team's current delivery ends.
-            if (HasAutomaticDeliveryInProgress(member.team))
-                return;
-
-            BeginTruckCooldown();
-            // AI keeps its Scout to continue capturing after dispatching an
-            // autonomous loaded truck, exactly like player auto-delivery.
-            GameObject truck = VehicleSpawnerFinal.SpawnAutoDeliveryTruck(vehicle, member.team, resourceType);
-            if (truck != null)
-            {
-                VehicleSimpleAI ai = truck.GetComponent<VehicleSimpleAI>() ?? truck.AddComponent<VehicleSimpleAI>();
-                AITruckDelivery delivery = truck.GetComponent<AITruckDelivery>() ?? truck.AddComponent<AITruckDelivery>();
-                delivery.Configure(ai, member.team);
-                VehicleMotor motor = truck.GetComponentInChildren<VehicleMotor>();
-                if (motor != null)
-                    motor.usePlayerInput = false;
-                TankMotor tankMotor = truck.GetComponentInChildren<TankMotor>();
-                if (tankMotor != null)
-                    tankMotor.usePlayerInput = false;
-            }
+        // AI is limited to one concurrent delivery; player mines are limited
+        // only by their own cooldown and can work in parallel.
+        if (member.team != GameManager.Instance.PlayerTeam && HasAutomaticDeliveryInProgress(member.team))
             return;
-        }
 
-        promptedNode = this;
-        promptedJeep = vehicle;
-        PlayerPrompt = "Mina de " + resourceType + ": [F] virar caminhão | [G] auto-entrega (mantém o Jeep).";
+        BeginTruckCooldown();
+        VehicleSpawnerFinal.SpawnAutoDeliveryTruck(vehicle, member.team, resourceType);
     }
 
     static bool HasAutomaticDeliveryInProgress(Team team)
@@ -220,19 +180,6 @@ public class ResourceNode : MonoBehaviour
     Vector3 GetRingCenter()
     {
         return GetVisualCenter();
-    }
-
-    void OnTriggerExit(Collider other)
-    {
-        if (other.transform.root.gameObject == promptedJeep)
-            ClearPrompt();
-    }
-
-    static void ClearPrompt()
-    {
-        promptedNode = null;
-        promptedJeep = null;
-        PlayerPrompt = null;
     }
 
     // ================= DONO =================

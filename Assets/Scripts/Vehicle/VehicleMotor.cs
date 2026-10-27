@@ -44,8 +44,12 @@ public class VehicleMotor : VehicleMotorBase
 
         rb.angularDamping = 8f;
 
-        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+        // Ground vehicles operate on the battlefield plane. Keeping Y free
+        // lets collider contacts turn into an accumulated launch impulse.
+        rb.constraints |= RigidbodyConstraints.FreezePositionY |
+                          RigidbodyConstraints.FreezeRotationX |
                           RigidbodyConstraints.FreezeRotationZ;
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         rb.maxAngularVelocity = 4f;
 
         rb.interpolation =
@@ -53,6 +57,7 @@ public class VehicleMotor : VehicleMotorBase
 
         rb.collisionDetectionMode =
             CollisionDetectionMode.Continuous;
+        rb.maxDepenetrationVelocity = 3f;
     
 
         // =========================
@@ -142,6 +147,11 @@ public class VehicleMotor : VehicleMotorBase
         LimitSpeed();
     }
 
+    void OnCollisionEnter(Collision collision)
+    {
+        ResolveVehicleCollision(collision);
+    }
+
     // =====================================================
     // MOVE
     // =====================================================
@@ -152,7 +162,7 @@ public class VehicleMotor : VehicleMotorBase
         rb.AddForce(
             transform.forward *
             moveInput *
-            blueprint.moveForce,
+            blueprint.moveForce * EnvironmentalSpeedMultiplier,
             // Blueprint values (Jeep 85, Truck 75) were authored as
             // accelerations. Using Force divided them by multi-ton masses,
             // leaving vehicles able to turn but practically unable to move.
@@ -243,12 +253,12 @@ public class VehicleMotor : VehicleMotorBase
 
         if (
             flatVelocity.magnitude >
-            blueprint.maxSpeed
+            blueprint.maxSpeed * EnvironmentalSpeedMultiplier
         )
         {
             Vector3 limitedVelocity =
                 flatVelocity.normalized *
-                blueprint.maxSpeed;
+                blueprint.maxSpeed * EnvironmentalSpeedMultiplier;
 
             rb.linearVelocity =
                 new Vector3(

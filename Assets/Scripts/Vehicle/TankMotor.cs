@@ -82,6 +82,11 @@ public class TankMotor : VehicleMotorBase
     }
 
     // =====================================================
+    void OnCollisionEnter(Collision collision)
+    {
+        ResolveVehicleCollision(collision);
+    }
+
     // APPLY PHYSICS
     // =====================================================
     void ApplyPhysics()
@@ -92,8 +97,10 @@ public class TankMotor : VehicleMotorBase
 
         rb.angularDamping = 8f;
 
-        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+        rb.constraints |= RigidbodyConstraints.FreezePositionY |
+                          RigidbodyConstraints.FreezeRotationX |
                           RigidbodyConstraints.FreezeRotationZ;
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         rb.maxAngularVelocity = 3f;
 
         rb.interpolation =
@@ -101,6 +108,7 @@ public class TankMotor : VehicleMotorBase
 
         rb.collisionDetectionMode =
             CollisionDetectionMode.Continuous;
+        rb.maxDepenetrationVelocity = 3f;
 
 
         if (centerOfMass != null)
@@ -156,7 +164,7 @@ public class TankMotor : VehicleMotorBase
         rb.AddForce(
             transform.forward *
             moveInput *
-            moveForce,
+            moveForce * EnvironmentalSpeedMultiplier,
             ForceMode.Acceleration
         );
     }
@@ -235,11 +243,12 @@ public class TankMotor : VehicleMotorBase
                 rb.linearVelocity.z
             );
 
-        if (flatVelocity.magnitude > maxSpeed)
+        float limitedMaxSpeed = maxSpeed * EnvironmentalSpeedMultiplier;
+        if (flatVelocity.magnitude > limitedMaxSpeed)
         {
             Vector3 limited =
                 flatVelocity.normalized *
-                maxSpeed;
+                limitedMaxSpeed;
 
             rb.linearVelocity =
                 new Vector3(

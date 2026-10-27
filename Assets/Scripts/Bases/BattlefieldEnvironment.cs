@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Runtime presentation for the prototype battlefield: green grass and a
@@ -6,7 +7,8 @@ using UnityEngine;
 public class BattlefieldEnvironment : MonoBehaviour
 {
     public float riverWidth = 24f;
-    public float riverLength = 300f;
+    public float riverLength = 420f;
+    [Min(1f)] public float groundScaleMultiplier = 1.5f;
 
     public void Build()
     {
@@ -20,6 +22,15 @@ public class BattlefieldEnvironment : MonoBehaviour
         {
             if (!renderer.gameObject.name.Equals("Plane", StringComparison.OrdinalIgnoreCase))
                 continue;
+
+            // The gameplay space is deliberately enlarged, leaving room for
+            // spotting and long indirect-fire routes on both sides of the
+            // river.
+            Vector3 scale = renderer.transform.localScale;
+            scale.x *= groundScaleMultiplier;
+            scale.z *= groundScaleMultiplier;
+            renderer.transform.localScale = scale;
+
             Material material = new Material(renderer.sharedMaterial);
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", new Color(0.20f, 0.48f, 0.16f));
             else material.color = new Color(0.20f, 0.48f, 0.16f);
@@ -29,8 +40,12 @@ public class BattlefieldEnvironment : MonoBehaviour
 
     void CreateRiver()
     {
-        if (GameObject.Find("Central River") != null)
+        GameObject existingRiver = GameObject.Find("Central River");
+        if (existingRiver != null)
+        {
+            ConfigureRiverSlowZone(existingRiver);
             return;
+        }
 
         FindBaseAxis(out Vector3 center, out Vector3 teamAxis);
         GameObject river = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -38,12 +53,24 @@ public class BattlefieldEnvironment : MonoBehaviour
         river.transform.position = center + Vector3.up * 0.03f;
         river.transform.rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, teamAxis), Vector3.up);
         river.transform.localScale = new Vector3(riverWidth, 0.06f, riverLength);
-        Collider collider = river.GetComponent<Collider>();
-        if (collider != null) Destroy(collider);
+        ConfigureRiverSlowZone(river);
         Renderer renderer = river.GetComponent<Renderer>();
         Material water = new Material(Shader.Find("Sprites/Default"));
         water.color = new Color(0.04f, 0.28f, 0.62f, 0.9f);
         renderer.material = water;
+    }
+
+    void ConfigureRiverSlowZone(GameObject river)
+    {
+        BoxCollider trigger = river.GetComponent<BoxCollider>();
+        if (trigger == null)
+            trigger = river.AddComponent<BoxCollider>();
+        trigger.isTrigger = true;
+        trigger.center = new Vector3(0f, 25f, 0f);
+        trigger.size = new Vector3(1f, 50f, 1f);
+
+        if (river.GetComponent<RiverSlowZone>() == null)
+            river.AddComponent<RiverSlowZone>();
     }
 
     void FindBaseAxis(out Vector3 center, out Vector3 axis)
@@ -60,5 +87,45 @@ public class BattlefieldEnvironment : MonoBehaviour
         axis.y = 0f;
         if (axis.sqrMagnitude < 0.01f) axis = Vector3.right;
         else axis.Normalize();
+    }
+}
+
+public class RiverSlowZone : MonoBehaviour
+{
+    const float RiverSpeedMultiplier = 0.5f;
+    readonly Dictionary<VehicleMotorBase, int> vehiclesInRiver = new Dictionary<VehicleMotorBase, int>();
+
+    void OnTriggerEnter(Collider other)
+    {
+        VehicleMotorBase vehicle = other.GetComponentInParent<VehicleMotorBase>();
+        if (vehicle == null)
+            return;
+
+        vehiclesInRiver.TryGetValue(vehicle, out int count);
+        vehiclesInRiver[vehicle] = count + 1;
+        vehicle.SetEnvironmentalSpeedMultiplier(RiverSpeedMultiplier);
+    }
+
+    void OnTriggerExit(Collider other)
+    {
+        VehicleMotorBase vehicle = other.GetComponentInParent<VehicleMotorBase>();
+        if (vehicle == null || !vehiclesInRiver.TryGetValue(vehicle, out int count))
+            return;
+
+        if (count <= 1)
+        {
+            vehiclesInRiver.Remove(vehicle);
+            vehicle.SetEnvironmentalSpeedMultiplier(1f);
+        }
+        else
+            vehiclesInRiver[vehicle] = count - 1;
+    }
+
+    void OnDisable()
+    {
+        foreach (VehicleMotorBase vehicle in vehiclesInRiver.Keys)
+            if (vehicle != null)
+                vehicle.SetEnvironmentalSpeedMultiplier(1f);
+        vehiclesInRiver.Clear();
     }
 }

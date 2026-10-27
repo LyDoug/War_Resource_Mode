@@ -35,15 +35,17 @@ public class VehicleSpawnerFinal : MonoBehaviour
         Quaternion exitRotation = oldVehicle.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
         Vector3 exitDirection = exitRotation * Vector3.forward;
         Vector3 exitPosition = oldVehicle.transform.position + exitDirection * 8f;
-        if (Physics.Raycast(exitPosition + Vector3.up * 8f, Vector3.down, out RaycastHit groundHit, 16f))
-            exitPosition.y = groundHit.point.y + 0.15f;
+        exitPosition = FindSafeTruckSpawnPosition(exitPosition, exitRotation);
         GameObject truck = Instantiate(truckBlueprint.prefab, exitPosition, exitRotation);
         TeamMember member = truck.GetComponentInChildren<TeamMember>();
         if (member != null)
             member.SetTeam(team);
         TruckCargo cargo = truck.GetComponentInChildren<TruckCargo>();
         if (cargo != null)
+        {
             cargo.Load(resource, 1);
+            cargo.BeginSafeSpawn();
+        }
 
         if (GameManager.Instance != null && GameManager.Instance.PlayerTeam == team)
         {
@@ -81,8 +83,7 @@ public class VehicleSpawnerFinal : MonoBehaviour
 
         Quaternion rotation = jeep.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
         Vector3 position = jeep.transform.position + (rotation * Vector3.forward) * 8f;
-        if (Physics.Raycast(position + Vector3.up * 8f, Vector3.down, out RaycastHit hit, 16f))
-            position.y = hit.point.y + 0.15f;
+        position = FindSafeTruckSpawnPosition(position, rotation);
 
         GameObject truck = Instantiate(truckBlueprint.prefab, position, rotation);
         TeamMember member = truck.GetComponentInChildren<TeamMember>();
@@ -90,7 +91,10 @@ public class VehicleSpawnerFinal : MonoBehaviour
             member.SetTeam(team);
         TruckCargo cargo = truck.GetComponentInChildren<TruckCargo>();
         if (cargo != null)
+        {
             cargo.Load(resource, 1);
+            cargo.BeginSafeSpawn();
+        }
 
         VehicleMotor motor = truck.GetComponentInChildren<VehicleMotor>();
         if (motor != null)
@@ -118,6 +122,54 @@ public class VehicleSpawnerFinal : MonoBehaviour
         Debug.LogWarning("Nenhum blueprint de caminhão foi encontrado para a mina.");
         return null;
     }
+    public static Vector3 FindSafeTruckSpawnPosition(Vector3 preferred, Quaternion rotation)
+    {
+        Vector3[] localOffsets =
+        {
+            Vector3.zero,
+            Vector3.forward * 6f,
+            Vector3.right * 6f,
+            Vector3.left * 6f,
+            Vector3.back * 6f,
+            (Vector3.forward + Vector3.right).normalized * 9f,
+            (Vector3.forward + Vector3.left).normalized * 9f
+        };
+
+        foreach (Vector3 localOffset in localOffsets)
+        {
+            Vector3 candidate = preferred + rotation * localOffset;
+            if (!HasVehicleNear(candidate, 5.5f))
+                return SetTruckSpawnHeight(candidate);
+        }
+
+        // Spawn immunity still protects the rare case where every exit point
+        // is occupied by a vehicle.
+        return SetTruckSpawnHeight(preferred);
+    }
+
+    static bool HasVehicleNear(Vector3 position, float radius)
+    {
+        foreach (VehicleController vehicle in FindObjectsByType<VehicleController>(FindObjectsSortMode.None))
+        {
+            if (vehicle == null)
+                continue;
+
+            Vector3 flatOffset = vehicle.transform.root.position - position;
+            flatOffset.y = 0f;
+            if (flatOffset.sqrMagnitude < radius * radius)
+                return true;
+        }
+        return false;
+    }
+
+    static Vector3 SetTruckSpawnHeight(Vector3 position)
+    {
+        if (Physics.Raycast(position + Vector3.up * 12f, Vector3.down, out RaycastHit hit,
+                24f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            position.y = hit.point.y + 0.15f;
+        return position;
+    }
+
     [Header("Spawner Settings")]
     public VehicleBlueprint[] availableBlueprints;
 
@@ -660,7 +712,9 @@ void SetupCamera(
         body.mass = blueprint.mass;
         body.linearDamping = 1.5f;
         body.angularDamping = 8f;
-        body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        body.maxDepenetrationVelocity = 3f;
+        body.constraints = RigidbodyConstraints.FreezePositionY |
+            RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
         TeamMember teamMember = vehicle.GetComponent<TeamMember>();
         if (teamMember == null)
@@ -676,10 +730,75 @@ void SetupCamera(
 
     void ConfigureRoleEquipment(GameObject vehicle, VehicleBlueprint blueprint)
     {
+        if (blueprint.role == VehicleRole.Tank)
+        {
+            foreach (TankGunBallistic tankGun in vehicle.GetComponentsInChildren<TankGunBallistic>(true))
+            {
+                bool secondary = tankGun.firePoint != null &&
+                    tankGun.firePoint.name.IndexOf("FirePointSec", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                tankGun.useSecondaryInput = secondary;
+                tankGun.enabled = true;
+
+                if (secondary)
+                {
+                    // Coaxial .50 cal: light, sustained secondary fire.
+                    tankGun.shellPrefab = Resources.Load<ProjectileBallistic>("Projectiles/Shell_50cal");
+                    tankGun.fireRate = 4f;
+                    tankGun.shellSpeed = 150f;
+                    tankGun.currentShellDamage = 8f;
+                    tankGun.recoilDistance = 0.02f;
+                    tankGun.muzzleFlashScale = 0.35f;
+                }
+                else
+                {
+                    tankGun.fireRate = blueprint.fireRate;
+                    tankGun.shellSpeed = blueprint.shellSpeed;
+                    tankGun.currentShellDamage = blueprint.shellDamage;
+                    tankGun.recoilDistance = blueprint.recoilDistance;
+                }
+            }
+        }
+
+        // The Jeep receives a defensive .50 cal. It fires a single low-damage
+        // round every few seconds, so it can disengage without replacing its
+        // scout role.
+        if (blueprint.role == VehicleRole.Jeep)
+        {
+            // Jeeps are forward observers.  The component is added at spawn
+            // time so every player-controlled Jeep can deploy a smoke marker
+            // without requiring a hand-edited prefab.
+            if (vehicle.GetComponent<ArtillerySpotter>() == null)
+                vehicle.AddComponent<ArtillerySpotter>();
+
+            IFVAutocannon jeepGun = vehicle.GetComponent<IFVAutocannon>();
+            if (jeepGun == null)
+                jeepGun = vehicle.AddComponent<IFVAutocannon>();
+            jeepGun.generatedFirePointName = "Jeep_FirePoint";
+            jeepGun.ConfigureFromVehicleBounds();
+            jeepGun.rearFireOnly = true;
+            jeepGun.fireRate = 1f;
+            jeepGun.projectileSpeed = 125f;
+            jeepGun.damage = 8f;
+            jeepGun.projectileScale = 0.75f;
+            jeepGun.shotsPerBurst = 3;
+            jeepGun.burstShotInterval = 0.12f;
+            jeepGun.burstCooldown = 3.5f;
+
+            IFVTurretController jeepTurret = vehicle.GetComponent<IFVTurretController>();
+            if (jeepTurret == null)
+                jeepTurret = vehicle.AddComponent<IFVTurretController>();
+            jeepTurret.Configure(jeepGun.firePoint, true, true, true);
+            return;
+        }
+
         // APC/IFV receives its own light autocannon. It never borrows a
         // GunPoint from the previously controlled Jeep or another vehicle.
         if (blueprint.role != VehicleRole.APC)
             return;
+
+        // IFVs carry the same reconnaissance smoke launcher as the Jeep.
+        if (vehicle.GetComponent<ArtillerySpotter>() == null)
+            vehicle.AddComponent<ArtillerySpotter>();
 
         IFVAutocannon gun = vehicle.GetComponent<IFVAutocannon>();
         if (gun == null)
@@ -692,18 +811,21 @@ void SetupCamera(
         turret.Configure(gun.firePoint);
     }
 
-    void ConfigureVehicleDurability(GameObject vehicle, VehicleRole role)
+    public static void ConfigureVehicleDurability(GameObject vehicle, VehicleRole role)
     {
         Health health = vehicle.GetComponentInChildren<Health>();
         if (health == null)
             health = vehicle.AddComponent<Health>();
 
-        float maxHealth = role == VehicleRole.Tank ? 350f :
-            role == VehicleRole.Artillery ? 140f :
-            role == VehicleRole.APC ? 150f :
-            role == VehicleRole.Truck ? 100f :
-            role == VehicleRole.UAV ? 45f : 60f;
-        health.ConfigureMaxHealth(maxHealth);
+        float maxHealth = role == VehicleRole.Tank ? 520f :
+            role == VehicleRole.Artillery ? 220f :
+            role == VehicleRole.APC ? 240f :
+            role == VehicleRole.Truck ? 110f :
+            role == VehicleRole.UAV ? 55f : 100f;
+        float armor = role == VehicleRole.Tank ? 0.55f :
+            role == VehicleRole.Artillery ? 0.15f :
+            role == VehicleRole.APC ? 0.20f : 0f;
+        health.ConfigureDurability(maxHealth, armor);
     }
 
     void SpawnVehicle(
@@ -803,7 +925,9 @@ void SetupCamera(
                 spawnPos + Vector3.up * 5f,
                 Vector3.down,
                 out RaycastHit hit,
-                10f
+                10f,
+                Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore
             )
         )
         {
@@ -827,13 +951,6 @@ void SetupCamera(
             "✅ VEÍCULO INSTANCIADO: " +
             currentVehicle.name
         );
-
-        foreach (MonoBehaviour weapon in currentVehicle.GetComponentsInChildren<MonoBehaviour>(true))
-        {
-            if (weapon != null && weapon.GetType().Name.Contains("TankGun") &&
-                weapon.gameObject.name.IndexOf("Sec", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                weapon.enabled = false;
-        }
 
         // =====================================================
         // TEAM

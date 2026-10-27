@@ -36,14 +36,18 @@ public class MainBaseResourceDispatcher : MonoBehaviour
         if (blueprint == null || !inventory.ConsumeResource(resource, 1))
             return;
 
-        Vector3 position = spawnPoint.position;
-        if (Physics.Raycast(position + Vector3.up * 8f, Vector3.down, out RaycastHit hit, 20f))
-            position.y = hit.point.y + 0.15f;
+        Vector3 position = VehicleSpawnerFinal.FindSafeTruckSpawnPosition(
+            spawnPoint.position,
+            spawnPoint.rotation);
         GameObject truck = Instantiate(blueprint.prefab, position, spawnPoint.rotation);
         TeamMember member = truck.GetComponentInChildren<TeamMember>();
         if (member != null) member.SetTeam(team);
         TruckCargo cargo = truck.GetComponentInChildren<TruckCargo>();
-        if (cargo != null) cargo.Load(resource, 1);
+        if (cargo != null)
+        {
+            cargo.Load(resource, 1);
+            cargo.BeginSafeSpawn();
+        }
         VehicleMotor motor = truck.GetComponentInChildren<VehicleMotor>();
         if (motor != null) motor.usePlayerInput = false;
         TankMotor tankMotor = truck.GetComponentInChildren<TankMotor>();

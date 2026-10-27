@@ -11,6 +11,7 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
 
     [Header("Health Settings")]
     public float maxHealth = 200f;
+    [Range(0f, 0.9f)] public float armorDamageReduction = 0.3f;
 
     [SerializeField]
     private float currentHealth;
@@ -113,7 +114,9 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         if (destroyed)
             return;
 
-        currentHealth -= damage;
+        float appliedDamage = Mathf.Max(0f, damage) * (1f - armorDamageReduction);
+        currentHealth -= appliedDamage;
+        DamageFeedback.Show(transform.position, appliedDamage, armorDamageReduction > 0f);
 
         currentHealth =
             Mathf.Clamp(
@@ -349,6 +352,27 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         return currentHealth;
     }
 
+    public void ConfigureDurability(float health, float armorReduction)
+    {
+        maxHealth = health;
+        armorDamageReduction = Mathf.Clamp(armorReduction, 0f, 0.9f);
+        currentHealth = maxHealth;
+    }
+
+    public static BaseDestructibleWithHealthVisual FindInHierarchy(Collider collider)
+    {
+        if (collider == null)
+            return null;
+
+        BaseDestructibleWithHealthVisual structure = collider.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+        if (structure != null)
+            return structure;
+
+        Transform root = collider.transform.root;
+        return root.GetComponent<BaseDestructibleWithHealthVisual>() ??
+            root.GetComponentInChildren<BaseDestructibleWithHealthVisual>(true);
+    }
+
     public bool IsDestroyed()
     {
         return destroyed;
@@ -443,30 +467,86 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
             return;
         bounds = visible.bounds;
 
+        // A compact, low rubble mound remains as cover. Keep its base on the
+        // terrain instead of centering a tall cube above the former model.
+        float rubbleHeight = Mathf.Max(0.22f, bounds.size.y * 0.08f);
+        float rubbleWidth = Mathf.Max(1.4f, bounds.size.x * 0.55f);
+        float rubbleDepth = Mathf.Max(1.4f, bounds.size.z * 0.55f);
+        Color rubbleColor = new Color(0.34f, 0.31f, 0.27f);
+        Material rubbleMaterial = CreateRubbleMaterial(rubbleColor);
+
         rubble = GameObject.CreatePrimitive(PrimitiveType.Cube);
         rubble.name = "Escombros - " + name;
-        rubble.transform.position = new Vector3(bounds.center.x, bounds.min.y + Mathf.Max(0.35f, bounds.size.y * 0.18f), bounds.center.z);
+        rubble.transform.position = new Vector3(bounds.center.x, bounds.min.y + rubbleHeight * 0.5f + 0.02f, bounds.center.z);
         rubble.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 180f), 0f);
-        rubble.transform.localScale = new Vector3(Mathf.Max(2f, bounds.size.x), Mathf.Max(0.35f, bounds.size.y * 0.175f), Mathf.Max(2f, bounds.size.z));
+        rubble.transform.localScale = new Vector3(rubbleWidth, rubbleHeight, rubbleDepth);
         Renderer rubbleRenderer = rubble.GetComponent<Renderer>();
         if (rubbleRenderer != null)
         {
-            Color rubbleColor = visible.material.HasProperty("_BaseColor") ? visible.material.GetColor("_BaseColor") : visible.material.color;
-            rubbleRenderer.material.color = rubbleColor;
+            rubbleRenderer.material = rubbleMaterial;
 
-            // Small uneven debris breaks the perfect-block silhouette.
-            for (int i = 0; i < 4; i++)
+            // Flattened, rotated pieces make the pile read as construction
+            // debris instead of a single black square.
+            for (int i = 0; i < 6; i++)
             {
                 GameObject debris = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 debris.name = "Detrito - " + name;
                 debris.transform.position = rubble.transform.position + new Vector3(
-                    Random.Range(-bounds.size.x * 0.4f, bounds.size.x * 0.4f),
-                    Random.Range(0.12f, 0.35f), Random.Range(-bounds.size.z * 0.4f, bounds.size.z * 0.4f));
-                debris.transform.rotation = Random.rotation;
-                debris.transform.localScale = Vector3.one * Random.Range(0.35f, 0.9f);
-                debris.GetComponent<Renderer>().material.color = rubbleColor;
+                    Random.Range(-rubbleWidth * 0.45f, rubbleWidth * 0.45f),
+                    rubbleHeight * 0.65f + Random.Range(0.03f, 0.16f),
+                    Random.Range(-rubbleDepth * 0.45f, rubbleDepth * 0.45f));
+                debris.transform.rotation = Quaternion.Euler(Random.Range(-12f, 12f), Random.Range(0f, 180f), Random.Range(-12f, 12f));
+                debris.transform.localScale = new Vector3(Random.Range(0.25f, 0.7f), Random.Range(0.12f, 0.28f), Random.Range(0.25f, 0.7f));
+                debris.GetComponent<Renderer>().material = CreateRubbleMaterial(Color.Lerp(rubbleColor, Color.gray, Random.Range(0f, 0.45f)));
             }
         }
+
+        CreateRubbleSmoke(rubble.transform, rubbleHeight);
+    }
+
+    Material CreateRubbleMaterial(Color color)
+    {
+        Shader shader = Shader.Find("Sprites/Default");
+        Material material = new Material(shader);
+        material.color = color;
+        return material;
+    }
+
+    void CreateRubbleSmoke(Transform parent, float rubbleHeight)
+    {
+        GameObject smoke = new GameObject("Fumaca - " + name);
+        smoke.transform.SetParent(parent, false);
+        smoke.transform.localPosition = Vector3.up * (rubbleHeight * 0.6f);
+        ParticleSystem particles = smoke.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = particles.main;
+        main.loop = true;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4.5f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.35f, 0.7f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.55f, 1.2f);
+        main.maxParticles = 28;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.startColor = new Color(0.28f, 0.28f, 0.28f, 0.48f);
+
+        ParticleSystem.EmissionModule emission = particles.emission;
+        emission.rateOverTime = 5f;
+        ParticleSystem.ShapeModule shape = particles.shape;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.radius = 0.25f;
+        shape.angle = 9f;
+
+        ParticleSystem.ColorOverLifetimeModule fade = particles.colorOverLifetime;
+        fade.enabled = true;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(new Color(0.22f, 0.22f, 0.22f), 0f), new GradientColorKey(new Color(0.45f, 0.45f, 0.45f), 1f) },
+            new[] { new GradientAlphaKey(0.45f, 0f), new GradientAlphaKey(0f, 1f) });
+        fade.color = new ParticleSystem.MinMaxGradient(gradient);
+
+        ParticleSystemRenderer renderer = smoke.GetComponent<ParticleSystemRenderer>();
+        Shader smokeShader = Shader.Find("Particles/Standard Unlit");
+        if (smokeShader == null)
+            smokeShader = Shader.Find("Sprites/Default");
+        renderer.material = new Material(smokeShader);
     }
 }
 

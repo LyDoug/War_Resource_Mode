@@ -38,8 +38,10 @@ public class AIStructureTarget : MonoBehaviour
         if (teamMember == null)
             return;
 
-        bool combatVehicle = GetComponentInChildren<TankMotor>() != null ||
-            GetComponentInChildren<DeployableVehicle>() != null;
+        bool combatVehicle = GetComponent<AICombatAttack>() != null;
+
+        if (combatVehicle && TryTargetNearestEnemyVehicle())
+            return;
 
         // A Scout with factory stock returns to manufacture first. Combat
         // vehicles skip economy and pressure the opposing main base.
@@ -101,12 +103,25 @@ public class AIStructureTarget : MonoBehaviour
             }
         }
 
-        // Economy first: secure a mine, then a factory/city. Once those are
-        // owned, push towards the opponent's main base.
+        // Scouts secure the economy. Combat units pressure a city first so
+        // the ticket drain can end a match; when no city is available they
+        // proceed to the enemy main base.
         CaptureTriggerAdvanced bestTarget = bestMine ?? bestStructure ?? enemyMainBase;
 
-        if (combatVehicle && enemyMainBase != null)
-            bestTarget = enemyMainBase;
+        if (combatVehicle)
+        {
+            CaptureTriggerAdvanced enemyCity = null;
+            foreach (CaptureTriggerAdvanced candidate in allBases)
+            {
+                if (candidate != null && candidate.structureType == StructureType.City &&
+                    candidate.currentOwner != teamMember.team)
+                {
+                    enemyCity = candidate;
+                    break;
+                }
+            }
+            bestTarget = enemyCity ?? enemyMainBase ?? bestStructure;
+        }
 
         // aplica target
         if (bestTarget != null)
@@ -119,5 +134,36 @@ public class AIStructureTarget : MonoBehaviour
                 bestTarget.name
             );
         }
+    }
+
+    bool TryTargetNearestEnemyVehicle()
+    {
+        Health closest = null;
+        float closestDistance = Mathf.Infinity;
+
+        foreach (Health candidate in FindObjectsByType<Health>(FindObjectsSortMode.None))
+        {
+            if (candidate == null || candidate.transform.root == transform.root)
+                continue;
+
+            TeamMember candidateTeam = candidate.GetComponentInParent<TeamMember>() ??
+                candidate.transform.root.GetComponentInChildren<TeamMember>(true);
+            if (candidateTeam == null || candidateTeam.team == Team.Neutral ||
+                candidateTeam.team == teamMember.team)
+                continue;
+
+            float distance = (candidate.transform.position - transform.position).sqrMagnitude;
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closest = candidate;
+            }
+        }
+
+        if (closest == null)
+            return false;
+
+        ai.target = closest.transform;
+        return true;
     }
 }

@@ -67,8 +67,10 @@ public class TankTracksMovement : MonoBehaviour
             CollisionDetectionMode.Continuous;
 
         rb.maxAngularVelocity = 2f;
-        rb.constraints |= RigidbodyConstraints.FreezeRotationX |
+        rb.constraints |= RigidbodyConstraints.FreezePositionY |
+                          RigidbodyConstraints.FreezeRotationX |
                           RigidbodyConstraints.FreezeRotationZ;
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
 
         // =========================================
         // CENTER OF MASS

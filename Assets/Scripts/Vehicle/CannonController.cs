@@ -19,6 +19,7 @@ public class TankCannonAim : MonoBehaviour
     float targetAngle;
     float currentAngle;
     TankMotor tankMotor;
+    bool computerControlled;
 
     // =====================================================
     // START
@@ -49,6 +50,9 @@ public class TankCannonAim : MonoBehaviour
     // =====================================================
     void HandleInput()
     {
+        if (computerControlled)
+            return;
+
         if (tankMotor != null && tankMotor.usePlayerInput && Camera.main != null)
         {
             Transform turret = transform.parent;
@@ -124,5 +128,26 @@ public class TankCannonAim : MonoBehaviour
     public float GetCurrentAngle()
     {
         return currentAngle;
+    }
+
+    public void SetComputerAim(bool active, float elevationDegrees)
+    {
+        computerControlled = active;
+        if (computerControlled)
+            // Model convention: negative local X raises this artillery barrel.
+            targetAngle = Mathf.Clamp(-elevationDegrees, minAngle, maxAngle);
+        else
+            targetAngle = 0f;
+    }
+
+    public void SetStowAim()
+    {
+        computerControlled = true;
+        targetAngle = 0f;
+    }
+
+    public void ReleaseComputerAim()
+    {
+        computerControlled = false;
     }
 }

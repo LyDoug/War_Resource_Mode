@@ -102,7 +102,7 @@ public class EnemySpawner : MonoBehaviour
         activeEnemy = obj;
         nextScoutSpawnTime = Time.time + 2f;
 
-        ConfigureAIUnit(obj);
+        ConfigureAIUnit(obj, null);
 
         Debug.Log(
             "🤖 Enemy spawned: " +
@@ -148,7 +148,7 @@ public class EnemySpawner : MonoBehaviour
 
         GameObject unit = Instantiate(blueprint.prefab, factory.spawnPoint.position, factory.spawnPoint.rotation);
         activeEnemy = unit;
-        ConfigureAIUnit(unit);
+        ConfigureAIUnit(unit, blueprint);
         Debug.Log("IA produziu " + role + " na fábrica " + factory.name);
         return true;
     }
@@ -195,8 +195,11 @@ public class EnemySpawner : MonoBehaviour
         return null;
     }
 
-    void ConfigureAIUnit(GameObject unit)
+    void ConfigureAIUnit(GameObject unit, VehicleBlueprint blueprint)
     {
+        if (blueprint != null)
+            VehicleSpawnerFinal.ConfigureVehicleDurability(unit, blueprint.role);
+
         TeamMember tm = unit.GetComponentInChildren<TeamMember>();
         if (tm != null)
             tm.SetTeam(enemyTeam);
@@ -206,11 +209,12 @@ public class EnemySpawner : MonoBehaviour
         if (unit.GetComponent<AIStructureTarget>() == null)
             unit.AddComponent<AIStructureTarget>();
 
-        // Scouts capture/extract; combat vehicles also damage structures once
-        // they arrive, allowing the AI to close the full match loop.
-        if ((unit.GetComponentInChildren<TankMotor>() != null ||
-             unit.GetComponentInChildren<DeployableVehicle>() != null) &&
-            unit.GetComponent<AICombatAttack>() == null)
+        // Scouts capture/extract; produced combat vehicles hunt enemy units,
+        // then pressure cities and the opposing main base.
+        bool combatRole = blueprint != null &&
+            (blueprint.role == VehicleRole.Tank || blueprint.role == VehicleRole.Artillery ||
+             blueprint.role == VehicleRole.APC);
+        if (combatRole && unit.GetComponent<AICombatAttack>() == null)
         {
             AICombatAttack attack = unit.AddComponent<AICombatAttack>();
             if (unit.GetComponentInChildren<DeployableVehicle>() != null)

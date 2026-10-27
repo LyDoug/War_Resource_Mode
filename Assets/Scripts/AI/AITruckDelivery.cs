@@ -7,12 +7,23 @@ public class AITruckDelivery : MonoBehaviour
     VehicleSimpleAI ai;
     Team team;
     bool delivered;
+    bool returnToMainBase;
     BaseInventory destinationInventory;
 
     public void Configure(VehicleSimpleAI vehicleAI, Team owner)
     {
         ai = vehicleAI;
         team = owner;
+        returnToMainBase = false;
+        FindDelivery();
+    }
+
+    public void RedirectToMainBase(VehicleSimpleAI vehicleAI, Team owner)
+    {
+        ai = vehicleAI;
+        team = owner;
+        delivered = false;
+        returnToMainBase = true;
         FindDelivery();
     }
 
@@ -33,6 +44,20 @@ public class AITruckDelivery : MonoBehaviour
     {
         if (ai == null || team == Team.Neutral)
             return;
+
+        if (returnToMainBase)
+        {
+            foreach (TeamMember member in FindObjectsByType<TeamMember>(FindObjectsSortMode.None))
+            {
+                if (member.team != team || member.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                destinationInventory = member.GetComponent<BaseInventory>() ??
+                    member.GetComponentInChildren<BaseInventory>() ?? member.gameObject.AddComponent<BaseInventory>();
+                ai.target = member.transform;
+                return;
+            }
+            return;
+        }
 
         VehicleSpawnerFinal best = null;
         float bestDistance = Mathf.Infinity;

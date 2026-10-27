@@ -18,18 +18,28 @@ public class AICombatAttack : MonoBehaviour
         if (navigation == null || navigation.target == null)
             return;
 
-        CaptureTriggerAdvanced capture = navigation.target.GetComponent<CaptureTriggerAdvanced>();
-        if (capture == null)
-            return;
-
-        BaseDestructibleWithHealthVisual target = capture.baseScript ??
-            capture.GetComponentInParent<BaseDestructibleWithHealthVisual>();
-        if (target == null)
-            return;
-
         Vector3 offset = navigation.target.position - transform.position;
         offset.y = 0f;
         if (offset.sqrMagnitude > attackRange * attackRange)
+            return;
+
+        // Combat targets can be either an enemy unit or an objective. This
+        // lets the commander react to an exposed player vehicle before it
+        // resumes its strategic push against cities/main base.
+        Health vehicleTarget = navigation.target.GetComponentInParent<Health>() ??
+            navigation.target.GetComponentInChildren<Health>();
+        if (vehicleTarget != null)
+        {
+            vehicleTarget.TakeDamage(damagePerShot);
+            nextAttack = Time.time + attackInterval;
+            return;
+        }
+
+        CaptureTriggerAdvanced capture = navigation.target.GetComponent<CaptureTriggerAdvanced>();
+        BaseDestructibleWithHealthVisual target = capture != null
+            ? capture.baseScript ?? capture.GetComponentInParent<BaseDestructibleWithHealthVisual>()
+            : navigation.target.GetComponentInParent<BaseDestructibleWithHealthVisual>();
+        if (target == null)
             return;
 
         target.TakeDamage(damagePerShot);

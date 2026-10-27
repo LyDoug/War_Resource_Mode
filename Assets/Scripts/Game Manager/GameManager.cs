@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
@@ -12,6 +13,7 @@ public class GameManager : MonoBehaviour
     public Team PlayerTeam => playerTeam;
     public bool MatchStarted { get; private set; }
     public bool GameEnded => gameEnded;
+    public bool PlayerRespawnPending => playerRespawnQueued;
     public Team WinningTeam { get; private set; } = Team.Neutral;
     public bool tankBlueprintSelected = false;
     public bool spgBlueprintSelected = false;
@@ -87,6 +89,10 @@ public class GameManager : MonoBehaviour
         ResourceType.None;
 
     bool gameEnded = false;
+    bool playerRespawnQueued;
+
+    [Header("Player Respawn")]
+    [SerializeField, Min(0f)] float playerRespawnDelay = 1.5f;
 
     // =====================================================
     // RADARSTATION
@@ -107,6 +113,7 @@ public class GameManager : MonoBehaviour
         }
 
         Instance = this;
+        Health.Destroyed += HandleHealthDestroyed;
 
         // Every new battle starts with an empty factory loadout. Players must
         // explicitly choose the two blueprints they want before StartMatch.
@@ -138,6 +145,15 @@ public class GameManager : MonoBehaviour
         spawnHud.showSpawnPanel = true;
     }
 
+    void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Health.Destroyed -= HandleHealthDestroyed;
+            Instance = null;
+        }
+    }
+
     void Start()
     {
         // One commander represents one opposing player. Earlier test builds
@@ -164,7 +180,7 @@ public class GameManager : MonoBehaviour
 
             objective.endsMatchOnDestruction = true;
             objective.mainBaseTeam = member.team;
-            objective.maxHealth = 500f;
+            objective.ConfigureDurability(1600f, 0.45f);
 
             FlagController baseFlag = member.GetComponent<FlagController>();
             if (baseFlag == null)
@@ -323,6 +339,48 @@ public class GameManager : MonoBehaviour
     public void SetActiveSpawner(VehicleSpawnerFinal spawner)
     {
         ActiveSpawner = spawner;
+    }
+
+    void HandleHealthDestroyed(Health health)
+    {
+        if (!MatchStarted || gameEnded || playerRespawnQueued || health == null)
+            return;
+
+        VehicleController vehicle = health.GetComponentInParent<VehicleController>() ??
+            health.transform.root.GetComponentInChildren<VehicleController>(true);
+        if (vehicle == null || !vehicle.IsControlled)
+            return;
+
+        TeamMember member = health.GetComponentInParent<TeamMember>() ??
+            health.transform.root.GetComponentInChildren<TeamMember>(true);
+        if (member == null || member.team != playerTeam)
+            return;
+
+        playerRespawnQueued = true;
+        StartCoroutine(RespawnPlayerAtMainBase());
+    }
+
+    IEnumerator RespawnPlayerAtMainBase()
+    {
+        yield return new WaitForSecondsRealtime(playerRespawnDelay);
+
+        if (!gameEnded && MatchStarted)
+        {
+            VehicleSpawnerFinal[] spawners =
+                FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None);
+            foreach (VehicleSpawnerFinal spawner in spawners)
+            {
+                if (spawner == null || !spawner.isActiveAndEnabled ||
+                    spawner.baseCapture != null || spawner.playerTeam != playerTeam ||
+                    spawner.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                spawner.TrySpawn(VehicleRole.Jeep);
+                break;
+            }
+        }
+
+        playerRespawnQueued = false;
     }
 
 

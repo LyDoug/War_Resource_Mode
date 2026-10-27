@@ -484,6 +484,7 @@ MonoBehaviour:
   recoilReturnSpeed: 10
   muzzleFlashPrefab: {fileID: 100004, guid: fd4a45d1b6004d444a831d09319a8712, type: 3}
   muzzleFlashDuration: 1.5
+  muzzleFlashScale: 1
 --- !u!1 &3645874564732460243
 GameObject:
   m_ObjectHideFlags: 0
@@ -867,5 +868,6 @@ MonoBehaviour:
   recoilDistance: 0
   currentShellDamage: 200
   recoilReturnSpeed: 0
-  muzzleFlashPrefab: {fileID: 100004, guid: fd4a45d1b6004d444a831d09319a8712, type: 3}
+  muzzleFlashPrefab: {fileID: 100006, guid: 2f7910242354c78419d50ac9e64b496f, type: 3}
   muzzleFlashDuration: 1.5
+  muzzleFlashScale: 0.35
