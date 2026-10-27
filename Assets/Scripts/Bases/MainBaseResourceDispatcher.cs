@@ -4,10 +4,17 @@ using UnityEngine;
 // owning team controls at least one factory.
 public class MainBaseResourceDispatcher : MonoBehaviour
 {
+    public static string PlayerPrompt { get; private set; }
+    static MainBaseResourceDispatcher promptedBase;
+
     public Team team;
     public BaseInventory inventory;
     public Transform spawnPoint;
     public float checkInterval = 3f;
+    [Header("Logistics control")]
+    [Tooltip("When enabled, stored resources are sent to the nearest friendly factory.")]
+    public bool autoRedirectToFactories = true;
+    [Min(2f)] public float interactionRange = 18f;
 
     void Start()
     {
@@ -24,7 +31,7 @@ public class MainBaseResourceDispatcher : MonoBehaviour
     void DispatchOneResource()
     {
         if (GameManager.Instance == null || !GameManager.Instance.MatchStarted ||
-            team == Team.Neutral || !HasFriendlyFactory() || spawnPoint == null)
+            team == Team.Neutral || !autoRedirectToFactories || !HasFriendlyFactory() || spawnPoint == null)
             return;
 
         ResourceType resource = inventory.HasResource(ResourceType.Steel, 1) ? ResourceType.Steel :
@@ -54,6 +61,49 @@ public class MainBaseResourceDispatcher : MonoBehaviour
         if (tankMotor != null) tankMotor.usePlayerInput = false;
         VehicleSimpleAI ai = truck.GetComponent<VehicleSimpleAI>() ?? truck.AddComponent<VehicleSimpleAI>();
         (truck.GetComponent<AITruckDelivery>() ?? truck.AddComponent<AITruckDelivery>()).Configure(ai, team);
+    }
+
+    void Update()
+    {
+        VehicleController controlled = null;
+        foreach (VehicleController candidate in FindObjectsByType<VehicleController>(FindObjectsSortMode.None))
+            if (candidate != null && candidate.IsControlled) { controlled = candidate; break; }
+
+        TeamMember driverTeam = controlled != null
+            ? controlled.GetComponentInParent<TeamMember>() ?? controlled.transform.root.GetComponentInChildren<TeamMember>(true)
+            : null;
+        bool canConfigure = controlled != null && driverTeam != null && driverTeam.team == team &&
+            Vector3.SqrMagnitude(controlled.transform.root.position - transform.position) <= interactionRange * interactionRange;
+
+        if (!canConfigure)
+        {
+            if (promptedBase == this)
+            {
+                PlayerPrompt = null;
+                promptedBase = null;
+            }
+            return;
+        }
+
+        promptedBase = this;
+        PlayerPrompt = autoRedirectToFactories
+            ? "BASE PRINCIPAL: [F] reter recursos e caminhões na base"
+            : "BASE PRINCIPAL: [F] ativar redirecionamento automático às fábricas";
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            autoRedirectToFactories = !autoRedirectToFactories;
+            Debug.Log(autoRedirectToFactories
+                ? "Base principal: redirecionamento automático ativado."
+                : "Base principal: recursos serão retidos na base.");
+        }
+    }
+
+    public static MainBaseResourceDispatcher FindForTeam(Team desiredTeam)
+    {
+        foreach (MainBaseResourceDispatcher dispatcher in FindObjectsByType<MainBaseResourceDispatcher>(FindObjectsSortMode.None))
+            if (dispatcher != null && dispatcher.team == desiredTeam)
+                return dispatcher;
+        return null;
     }
 
     bool HasFriendlyFactory()

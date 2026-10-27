@@ -175,6 +175,16 @@ public class TruckCargo : MonoBehaviour
         return vehicleRoot.GetComponentInChildren<IFVAutocannon>(true) != null;
     }
 
+    public bool TryCaptureForAI(Team newTeam)
+    {
+        TeamMember member = GetComponentInParent<TeamMember>() ?? GetComponent<TeamMember>();
+        if (member == null || newTeam == Team.Neutral || member.team == Team.Neutral || member.team == newTeam)
+            return false;
+
+        CaptureFor(newTeam, false);
+        return true;
+    }
+
     void CaptureFor(Team newTeam, bool takeControl)
     {
         TeamMember member = GetComponentInParent<TeamMember>() ?? GetComponent<TeamMember>();

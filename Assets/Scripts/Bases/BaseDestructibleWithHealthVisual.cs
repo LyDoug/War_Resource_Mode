@@ -11,10 +11,14 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
 
     [Header("Health Settings")]
     public float maxHealth = 200f;
+    [Tooltip("Fator usado para calcular a blindagem inicial quando nao houver um valor manual.")]
     [Range(0f, 0.9f)] public float armorDamageReduction = 0.3f;
+    [Min(0f)] public float armorThresholdOverride;
 
     [SerializeField]
     private float currentHealth;
+    [SerializeField] private float maxArmorIntegrity;
+    [SerializeField] private float currentArmorIntegrity;
 
     bool destroyed = false;
 
@@ -47,6 +51,7 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         originalPosition = transform.position;
         originalRotation = transform.rotation;
         currentHealth = maxHealth;
+        ResetArmor();
 
         // CAPTURE
         capture =
@@ -114,9 +119,17 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         if (destroyed)
             return;
 
-        float appliedDamage = Mathf.Max(0f, damage) * (1f - armorDamageReduction);
+        float incomingDamage = Mathf.Max(0f, damage);
+        float absorbedDamage = Mathf.Min(incomingDamage, currentArmorIntegrity);
+        float appliedDamage = incomingDamage - absorbedDamage;
+        if (absorbedDamage > 0f)
+        {
+            currentArmorIntegrity = Mathf.Max(0f, currentArmorIntegrity - absorbedDamage * 0.5f);
+            if (currentArmorIntegrity <= 0f)
+                Debug.Log(gameObject.name + " blindagem quebrada!");
+        }
         currentHealth -= appliedDamage;
-        DamageFeedback.Show(transform.position, appliedDamage, armorDamageReduction > 0f);
+        DamageFeedback.Show(transform.position, appliedDamage, absorbedDamage > 0f);
 
         currentHealth =
             Mathf.Clamp(
@@ -273,6 +286,7 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         // RESET HEALTH
         // =====================================
         currentHealth = maxHealth;
+        ResetArmor();
 
         destroyed = false;
 
@@ -357,6 +371,15 @@ public class BaseDestructibleWithHealthVisual : MonoBehaviour
         maxHealth = health;
         armorDamageReduction = Mathf.Clamp(armorReduction, 0f, 0.9f);
         currentHealth = maxHealth;
+        ResetArmor();
+    }
+
+    void ResetArmor()
+    {
+        maxArmorIntegrity = armorThresholdOverride > 0f
+            ? armorThresholdOverride
+            : maxHealth * armorDamageReduction * 0.30f;
+        currentArmorIntegrity = maxArmorIntegrity;
     }
 
     public static BaseDestructibleWithHealthVisual FindInHierarchy(Collider collider)

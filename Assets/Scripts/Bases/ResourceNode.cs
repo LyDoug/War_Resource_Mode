@@ -14,12 +14,22 @@ public class ResourceNode : MonoBehaviour
     LineRenderer markerRenderer;
     CaptureTriggerAdvanced captureZone;
     [Header("Resource cooldown")]
-    [Min(0.5f)] public float truckCooldown = 5f;
+    [Min(0.5f)] public float truckCooldown = 10f;
     float nextTruckAvailableTime;
-    Transform cooldownBar;
+    const int CooldownRingSegments = 32;
+    // Steel Mine has a wider imported mesh than the oil well. Keep the timer
+    // outside its footprint so it is never hidden under the model.
+    float CooldownRingRadius => resourceType == ResourceType.Steel ? 9f : 5.5f;
+    readonly Transform[] cooldownRingSegments = new Transform[CooldownRingSegments];
+    bool worldIndicatorsVisible = true;
 
     void Awake()
     {
+        // Existing scene instances were authored with the former five-second
+        // value. Enforce the new gameplay minimum even before those prefabs
+        // are re-saved in the editor.
+        truckCooldown = Mathf.Max(10f, truckCooldown);
+
         // Mines are fixed interaction volumes, not movable physics props.
         Rigidbody body = GetComponent<Rigidbody>();
         if (body != null)
@@ -51,22 +61,14 @@ public class ResourceNode : MonoBehaviour
             if (candidate.resourceNode == this) { captureZone = candidate; break; }
         UpdateMarkerColor();
 
-        GameObject bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        bar.name = "Mine Resource Cooldown";
-        bar.transform.position = transform.position + Vector3.up * 3.2f;
-        Collider barCollider = bar.GetComponent<Collider>();
-        if (barCollider != null) Destroy(barCollider);
-        Renderer barRenderer = bar.GetComponent<Renderer>();
-        barRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        barRenderer.material.color = new Color(1f, 0.8f, 0.05f);
-        cooldownBar = bar.transform;
+        CreateCooldownRing();
     }
 
     void Update()
     {
         if (extractionMarker != null)
             extractionMarker.position = GetRingCenter() + Vector3.up * 0.1f;
-        UpdateCooldownBar();
+        UpdateCooldownRing();
 
         // Extraction is automatic. A friendly vehicle entering a ready mine
         // dispatches a loaded truck while keeping the vehicle under control.
@@ -125,16 +127,45 @@ public class ResourceNode : MonoBehaviour
         nextTruckAvailableTime = Time.time + truckCooldown;
     }
 
-    void UpdateCooldownBar()
+    void CreateCooldownRing()
     {
-        if (cooldownBar == null)
-            return;
+        for (int index = 0; index < CooldownRingSegments; index++)
+        {
+            GameObject segment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            segment.name = $"Cooldown Segment {index + 1}";
+            segment.transform.SetParent(transform, true);
+            Collider segmentCollider = segment.GetComponent<Collider>();
+            if (segmentCollider != null)
+                Destroy(segmentCollider);
 
-        cooldownBar.position = GetRingCenter() + Vector3.up * 3.2f;
+            Renderer renderer = segment.GetComponent<Renderer>();
+            renderer.material = new Material(Shader.Find("Sprites/Default"));
+            renderer.material.color = new Color(1f, 0.8f, 0.05f, 0.95f);
+            cooldownRingSegments[index] = segment.transform;
+        }
+    }
+
+    void UpdateCooldownRing()
+    {
         float remaining = Mathf.Max(0f, nextTruckAvailableTime - Time.time);
-        float ready = 1f - remaining / truckCooldown;
-        cooldownBar.localScale = new Vector3(Mathf.Max(0.05f, ready * 4f), 0.2f, 0.25f);
-        cooldownBar.gameObject.SetActive(remaining > 0f);
+        int visibleSegments = remaining > 0f
+            ? Mathf.CeilToInt((remaining / truckCooldown) * CooldownRingSegments)
+            : 0;
+        Vector3 center = GetRingCenter() + Vector3.up * 0.14f;
+
+        for (int index = 0; index < CooldownRingSegments; index++)
+        {
+            Transform segment = cooldownRingSegments[index];
+            if (segment == null)
+                continue;
+
+            float angle = index * Mathf.PI * 2f / CooldownRingSegments;
+            Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+            segment.position = center + radial * CooldownRingRadius;
+            segment.rotation = Quaternion.LookRotation(radial, Vector3.up);
+            segment.localScale = new Vector3(0.20f, 0.06f, 0.66f);
+            segment.gameObject.SetActive(worldIndicatorsVisible && index < visibleSegments);
+        }
     }
 
     public Vector3 GetVisualCenter()
@@ -171,10 +202,13 @@ public class ResourceNode : MonoBehaviour
 
     public void SetWorldIndicatorsVisible(bool visible)
     {
+        worldIndicatorsVisible = visible;
         if (extractionMarker != null)
             extractionMarker.gameObject.SetActive(visible);
-        if (cooldownBar != null)
-            cooldownBar.gameObject.SetActive(visible && Time.time < nextTruckAvailableTime);
+        bool cooldownActive = visible && Time.time < nextTruckAvailableTime;
+        foreach (Transform segment in cooldownRingSegments)
+            if (segment != null)
+                segment.gameObject.SetActive(cooldownActive);
     }
 
     Vector3 GetRingCenter()

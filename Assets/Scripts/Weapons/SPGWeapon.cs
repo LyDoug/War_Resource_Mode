@@ -39,6 +39,8 @@ public class SPGWeapon : MonoBehaviour
     [Min(0.2f)] public float deploymentDuration = 1.5f;
     [Min(10f)] public float tacticalVisionRange = 120f;
     [Min(0f)] public float minimumFiringRange = 30f;
+    [Tooltip("Maximum landing error for a map target outside observation range.")]
+    [Min(0f)] public float blindFireScatterRadius = 28f;
 
     [Header("Fire Rate")]
     public float reloadTime = 5f;
@@ -189,9 +191,6 @@ public class SPGWeapon : MonoBehaviour
                 GetOwningTeam());
         }
 
-        lastShotTarget = AimPoint;
-        lastShotTime = Time.time;
-
         Rigidbody rb =
             shell.GetComponent<Rigidbody>();
 
@@ -206,7 +205,10 @@ public class SPGWeapon : MonoBehaviour
             return;
         }
 
-        UpdateFireSolution();
+        Vector3 firingTarget = GetFiringTarget();
+        UpdateFireSolution(firingTarget);
+        lastShotTarget = firingTarget;
+        lastShotTime = Time.time;
         Vector3 velocity = solutionVelocity;
         if (!HasFireSolution)
         {
@@ -306,9 +308,41 @@ public class SPGWeapon : MonoBehaviour
         return firePoint.position + firePoint.forward * 100f;
     }
 
+    Vector3 GetFiringTarget()
+    {
+        Vector3 intendedTarget = GetAimPoint();
+        if (!hasMapTarget || IsTargetObserved(intendedTarget) || blindFireScatterRadius <= 0f)
+            return intendedTarget;
+
+        Vector3 flatOffset = intendedTarget - transform.root.position;
+        flatOffset.y = 0f;
+        float outsideVision = Mathf.Max(0f, flatOffset.magnitude - tacticalVisionRange);
+        float scatter = blindFireScatterRadius * Mathf.Lerp(0.35f, 1f,
+            Mathf.Clamp01(outsideVision / Mathf.Max(1f, tacticalVisionRange)));
+        Vector2 randomOffset = Random.insideUnitCircle * scatter;
+        Vector3 scatteredTarget = intendedTarget + new Vector3(randomOffset.x, 0f, randomOffset.y);
+        if (Physics.Raycast(scatteredTarget + Vector3.up * 250f, Vector3.down, out RaycastHit hit, 500f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            scatteredTarget.y = hit.point.y;
+        return scatteredTarget;
+    }
+
+    public bool IsTargetObserved(Vector3 worldPosition)
+    {
+        Vector3 offset = worldPosition - transform.root.position;
+        offset.y = 0f;
+        return offset.sqrMagnitude <= tacticalVisionRange * tacticalVisionRange ||
+            TacticalRevealZone.IsRevealed(GetOwningTeam(), worldPosition);
+    }
+
     void UpdateFireSolution()
     {
-        AimPoint = GetAimPoint();
+        UpdateFireSolution(GetAimPoint());
+    }
+
+    void UpdateFireSolution(Vector3 target)
+    {
+        AimPoint = target;
         AimRange = Vector3.Distance(firePoint.position, AimPoint);
         if (AimRange < minimumFiringRange)
         {

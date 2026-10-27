@@ -4,6 +4,9 @@ public class AIStructureTarget : MonoBehaviour
 {
     [Header("Search")]
     public float refreshRate = 5f;
+    [Header("Truck interception")]
+    [Min(1f)] public float truckCaptureDistance = 12f;
+    [Min(1f)] public float truckSearchRange = 65f;
 
     VehicleSimpleAI ai;
 
@@ -41,6 +44,9 @@ public class AIStructureTarget : MonoBehaviour
         bool combatVehicle = GetComponent<AICombatAttack>() != null;
 
         if (combatVehicle && TryTargetNearestEnemyVehicle())
+            return;
+
+        if (CanCaptureTrucks() && TryCaptureOrTargetEnemyTruck())
             return;
 
         // A Scout with factory stock returns to manufacture first. Combat
@@ -162,6 +168,55 @@ public class AIStructureTarget : MonoBehaviour
 
         if (closest == null)
             return false;
+
+        ai.target = closest.transform;
+        return true;
+    }
+
+    bool CanCaptureTrucks()
+    {
+        VehicleMotor motor = GetComponentInChildren<VehicleMotor>(true);
+        if (motor != null && motor.blueprint != null)
+            return motor.blueprint.role == VehicleRole.Jeep || motor.blueprint.role == VehicleRole.APC;
+
+        return GetComponentInChildren<IFVAutocannon>(true) != null;
+    }
+
+    bool TryCaptureOrTargetEnemyTruck()
+    {
+        TruckCargo closest = null;
+        float closestDistance = truckSearchRange * truckSearchRange;
+
+        foreach (TruckCargo candidate in FindObjectsByType<TruckCargo>(FindObjectsSortMode.None))
+        {
+            if (candidate == null || candidate.transform.root == transform.root)
+                continue;
+
+            TeamMember truckTeam = candidate.GetComponentInParent<TeamMember>() ??
+                candidate.transform.root.GetComponentInChildren<TeamMember>(true);
+            if (truckTeam == null || truckTeam.team == Team.Neutral || truckTeam.team == teamMember.team)
+                continue;
+
+            float distance = (candidate.transform.position - transform.position).sqrMagnitude;
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closest = candidate;
+            }
+        }
+
+        if (closest == null)
+            return false;
+
+        if (closestDistance <= truckCaptureDistance * truckCaptureDistance)
+        {
+            if (closest.TryCaptureForAI(teamMember.team))
+            {
+                ai.target = null;
+                Debug.Log("AI capturou um truck inimigo e o redirecionou para a base.");
+            }
+            return true;
+        }
 
         ai.target = closest.transform;
         return true;

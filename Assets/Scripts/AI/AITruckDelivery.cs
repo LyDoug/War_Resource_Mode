@@ -59,6 +59,17 @@ public class AITruckDelivery : MonoBehaviour
             return;
         }
 
+        // A commander standing in the main base may hold its logistics.
+        // In that mode every loaded truck returns there rather than feeding a
+        // factory, so the player can decide when to resume production.
+        MainBaseResourceDispatcher dispatcher = MainBaseResourceDispatcher.FindForTeam(team);
+        if (dispatcher != null && !dispatcher.autoRedirectToFactories && dispatcher.inventory != null)
+        {
+            destinationInventory = dispatcher.inventory;
+            ai.target = dispatcher.transform;
+            return;
+        }
+
         VehicleSpawnerFinal best = null;
         float bestDistance = Mathf.Infinity;
         foreach (VehicleSpawnerFinal factory in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))

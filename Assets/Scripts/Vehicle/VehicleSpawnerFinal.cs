@@ -307,7 +307,8 @@ void Start()
 
         bool isFactory = baseCapture != null && baseCapture.structureType == StructureType.Factory;
         bool isMainBase = baseCapture == null || baseCapture.structureType == StructureType.MainBase;
-        if (IsFactoryBlueprint(desiredRole) && !isFactory)
+        bool canProduceAtMainBase = isMainBase && desiredRole == VehicleRole.Artillery;
+        if (IsFactoryBlueprint(desiredRole) && !isFactory && !canProduceAtMainBase)
         {
             Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
             return;
@@ -347,7 +348,7 @@ foreach (VehicleBlueprint bp in availableBlueprints)
 }
 
 Debug.Log("================================");
-        if (selected == null && isFactory)
+        if (selected == null && (isFactory || canProduceAtMainBase))
         {
             foreach (VehicleSpawnerFinal other in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))
             {
@@ -357,7 +358,7 @@ Debug.Log("================================");
                 if (selected != null) break;
             }
         }
-        if (selected == null && isFactory)
+        if (selected == null && (isFactory || canProduceAtMainBase))
         {
             foreach (VehicleBlueprint bp in Resources.LoadAll<VehicleBlueprint>("Blueprints"))
                 if (bp != null && bp.role == desiredRole && bp.prefab != null) { selected = bp; break; }
@@ -386,7 +387,7 @@ Debug.Log("================================");
             Debug.Log("Jipes só podem ser obtidos na base principal.");
             return;
         }
-        if (IsFactoryBlueprint(desiredRole) && !isFactory)
+        if (IsFactoryBlueprint(desiredRole) && !isFactory && !canProduceAtMainBase)
         {
             Debug.Log("Tanques e SPGs só podem ser produzidos em uma fábrica capturada.");
             return;
@@ -487,8 +488,10 @@ Debug.Log("================================");
         // =====================================================
         // SPAWN
         // =====================================================
-        if (desiredRole == VehicleRole.Artillery && artilleryManager != null)
+        if (desiredRole == VehicleRole.Artillery && (artilleryManager != null || isMainBase))
 {
+    if (artilleryManager == null && isMainBase)
+        artilleryManager = EnsureMainBaseArtilleryPositions();
     SpawnStaticArtillery(
         selected,
         teamOwner
@@ -501,6 +504,14 @@ else
         teamOwner
     );
 }
+    }
+
+    // Used by the hold-J ejection flow. The abandoned vehicle remains in the
+    // world, so it must not be treated as the previous vehicle to neutralize.
+    public void SpawnFreshVehicle(VehicleRole role)
+    {
+        currentVehicle = null;
+        TrySpawn(role);
     }
 
     public string GetSpawnStatus(VehicleRole role)
@@ -519,7 +530,7 @@ else
         {
             if (GameManager.Instance != null && !GameManager.Instance.IsBlueprintSelected(role))
                 return "SPG: blueprint não selecionado";
-            return !isFactory ? "SPG: apenas na fábrica" : "SPG: " + (inventory != null && inventory.HasResource(ResourceType.Oil, 1) ? "disponível" : "falta 1 óleo");
+            return !isFactory && !isMainBase ? "SPG: apenas na fábrica/base principal" : "SPG: " + (inventory != null && inventory.HasResource(ResourceType.Oil, 1) ? "disponível" : "falta 1 óleo");
         }
         return "Caminhão: obtido apenas nas minas";
     }
@@ -625,6 +636,33 @@ else
         pos.name
     );
 }
+
+    ArtilleryPositionManager EnsureMainBaseArtilleryPositions()
+    {
+        ArtilleryPositionManager existing = GetComponentInChildren<ArtilleryPositionManager>(true);
+        if (existing != null)
+            return existing;
+
+        GameObject holder = new GameObject("Main Base Artillery Positions");
+        holder.transform.SetParent(transform, false);
+        ArtilleryPositionManager manager = holder.AddComponent<ArtilleryPositionManager>();
+        manager.positions = new ArtilleryPosition[2];
+        Vector3[] offsets = { new Vector3(-12f, 0f, 12f), new Vector3(12f, 0f, 12f) };
+        for (int index = 0; index < offsets.Length; index++)
+        {
+            GameObject positionObject = new GameObject("SPG Position " + (index + 1));
+            positionObject.transform.SetParent(holder.transform, false);
+            positionObject.transform.position = transform.TransformPoint(offsets[index]);
+            positionObject.transform.rotation = transform.rotation;
+            if (Physics.Raycast(positionObject.transform.position + Vector3.up * 20f, Vector3.down, out RaycastHit hit, 40f,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                positionObject.transform.position = hit.point;
+            ArtilleryPosition position = positionObject.AddComponent<ArtilleryPosition>();
+            position.spawnPoint = positionObject.transform;
+            manager.positions[index] = position;
+        }
+        return manager;
+    }
 
 void SetupCamera(
     GameObject vehicle,

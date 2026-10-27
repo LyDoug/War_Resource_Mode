@@ -383,6 +383,23 @@ public class GameManager : MonoBehaviour
         playerRespawnQueued = false;
     }
 
+    public void EjectPlayerToMainBase()
+    {
+        if (!MatchStarted || gameEnded || playerRespawnQueued)
+            return;
+
+        foreach (VehicleSpawnerFinal spawner in FindObjectsByType<VehicleSpawnerFinal>(FindObjectsSortMode.None))
+        {
+            if (spawner == null || !spawner.isActiveAndEnabled || spawner.baseCapture != null ||
+                spawner.playerTeam != playerTeam ||
+                spawner.gameObject.name.IndexOf("MainBase", System.StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+
+            spawner.SpawnFreshVehicle(VehicleRole.Jeep);
+            return;
+        }
+    }
+
 
     // =====================================================
     // RADAR

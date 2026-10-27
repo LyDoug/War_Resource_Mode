@@ -149,7 +149,9 @@ public class GameHUD : MonoBehaviour
         DrawProductionPopupNew();
 
         string interactionPrompt = !string.IsNullOrEmpty(TruckCargo.PlayerPrompt)
-            ? TruckCargo.PlayerPrompt : ResourceNode.PlayerPrompt;
+            ? TruckCargo.PlayerPrompt : !string.IsNullOrEmpty(MainBaseResourceDispatcher.PlayerPrompt)
+                ? MainBaseResourceDispatcher.PlayerPrompt : !string.IsNullOrEmpty(VehicleController.PlayerPrompt)
+                    ? VehicleController.PlayerPrompt : ResourceNode.PlayerPrompt;
         if (!string.IsNullOrEmpty(interactionPrompt))
         {
             GUI.Box(new Rect(20f, Screen.height - 245f, 680f, 44f), interactionPrompt);
@@ -335,7 +337,8 @@ public class GameHUD : MonoBehaviour
             health.HealthFraction > 0.35f ? new Color(0.22f, 0.86f, 0.30f) : new Color(1f, 0.30f, 0.18f));
         GUI.Label(new Rect(panel.x + 78f, panel.y + 59f, 196f, 18f),
             Mathf.CeilToInt(health.CurrentHealth) + " / " + Mathf.CeilToInt(health.maxHealth) +
-            "     BLINDAGEM " + Mathf.RoundToInt(health.armorDamageReduction * 100f) + "%",
+            "     BLINDAGEM " + Mathf.CeilToInt(health.CurrentArmorIntegrity) +
+            " / " + Mathf.CeilToInt(health.MaxArmorIntegrity),
             new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleCenter });
 
         string primary = GetPrimaryWeaponStatus(root);
@@ -431,6 +434,10 @@ public class GameHUD : MonoBehaviour
             }
         }
 
+        // Apply the veil after terrain features: nothing beyond the tactical
+        // vision circle (unless illuminated by friendly smoke) leaks through.
+        DrawMapFog(spg, mapContent, center, halfSize);
+
         foreach (CaptureTriggerAdvanced structure in FindObjectsByType<CaptureTriggerAdvanced>(FindObjectsSortMode.None))
         {
             if (!IsMapVisible(spg, structure.transform.position))
@@ -509,7 +516,7 @@ public class GameHUD : MonoBehaviour
 
         GUI.color = previous;
         GUI.Label(new Rect(map.x, map.yMax + 3f, map.width, 18f),
-            "RMB: LIMPAR  |  VERDE: VIGILANCIA  |  LARANJA: ZONA CEGA",
+            "F FABRICA | C CIDADE | S MINA ACO | O MINA OLEO | ▲ SPG | X OBSERVADOR/INIMIGO",
             new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11 });
 
         Event current = Event.current;
@@ -530,10 +537,32 @@ public class GameHUD : MonoBehaviour
 
     bool IsMapVisible(SPGWeapon spg, Vector3 worldPosition)
     {
-        Vector3 offset = worldPosition - spg.transform.root.position;
-        offset.y = 0f;
-        return offset.sqrMagnitude <= spg.tacticalVisionRange * spg.tacticalVisionRange ||
-            TacticalRevealZone.IsRevealed(spg.OwningTeam, worldPosition);
+        return spg.IsTargetObserved(worldPosition);
+    }
+
+    void DrawMapFog(SPGWeapon spg, Rect mapContent, Vector3 center, float halfSize)
+    {
+        const int cells = 24;
+        Color previous = GUI.color;
+        GUI.color = new Color(0.015f, 0.025f, 0.02f, 0.82f);
+        float width = mapContent.width / cells;
+        float height = mapContent.height / cells;
+        for (int row = 0; row < cells; row++)
+        {
+            for (int column = 0; column < cells; column++)
+            {
+                Vector2 mapPoint = new Vector2(mapContent.x + (column + 0.5f) * width,
+                    mapContent.y + (row + 0.5f) * height);
+                float worldX = Mathf.Lerp(center.x - halfSize, center.x + halfSize,
+                    Mathf.InverseLerp(mapContent.x, mapContent.xMax, mapPoint.x));
+                float worldZ = Mathf.Lerp(center.z + halfSize, center.z - halfSize,
+                    Mathf.InverseLerp(mapContent.y, mapContent.yMax, mapPoint.y));
+                if (!spg.IsTargetObserved(new Vector3(worldX, center.y, worldZ)))
+                    GUI.DrawTexture(new Rect(mapContent.x + column * width, mapContent.y + row * height,
+                        width + 1f, height + 1f), Texture2D.whiteTexture);
+            }
+        }
+        GUI.color = previous;
     }
 
     string GetStructureMapSymbol(CaptureTriggerAdvanced structure)

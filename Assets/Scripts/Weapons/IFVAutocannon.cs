@@ -22,6 +22,7 @@ public class IFVAutocannon : MonoBehaviour
 
     float nextFireTime;
     int shotsInBurst;
+    float nextAutoTargetScan;
 
     public float CooldownRemaining => Mathf.Max(0f, nextFireTime - Time.time);
     public int ShotsRemainingInBurst => shotsPerBurst - shotsInBurst;
@@ -77,21 +78,65 @@ public class IFVAutocannon : MonoBehaviour
 
     void Update()
     {
-        if (VehicleController.IsLocallyControlled(this) &&
-            Input.GetMouseButton(0) && Time.time >= nextFireTime)
+        if (VehicleController.IsLocallyControlled(this) && Input.GetMouseButton(0))
         {
-            Fire();
-            shotsInBurst++;
-            if (shotsInBurst >= shotsPerBurst)
-            {
-                shotsInBurst = 0;
-                nextFireTime = Time.time + burstCooldown;
-            }
-            else
-            {
-                nextFireTime = Time.time + burstShotInterval;
-            }
+            TryFire();
         }
+        else if (rearFireOnly && Time.time >= nextAutoTargetScan)
+        {
+            nextAutoTargetScan = Time.time + 0.15f;
+            TryAutoFireAtEnemyInLine();
+        }
+    }
+
+    void TryAutoFireAtEnemyInLine()
+    {
+        TeamMember owner = GetComponentInParent<TeamMember>() ?? transform.root.GetComponentInChildren<TeamMember>(true);
+        if (owner == null || owner.team == Team.Neutral || firePoint == null)
+            return;
+
+        Health bestTarget = null;
+        float bestDistance = 65f * 65f;
+        foreach (Health candidate in FindObjectsByType<Health>(FindObjectsSortMode.None))
+        {
+            if (candidate == null || candidate.transform.root == transform.root)
+                continue;
+            TeamMember targetTeam = candidate.GetComponentInParent<TeamMember>() ?? candidate.transform.root.GetComponentInChildren<TeamMember>(true);
+            if (targetTeam == null || targetTeam.team == Team.Neutral || targetTeam.team == owner.team)
+                continue;
+
+            Vector3 offset = candidate.transform.position - firePoint.position;
+            float distance = offset.sqrMagnitude;
+            if (distance >= bestDistance || offset.sqrMagnitude < 0.01f || Vector3.Dot(firePoint.forward.normalized, offset.normalized) < 0.96f)
+                continue;
+
+            if (Physics.Raycast(firePoint.position + firePoint.forward * 0.2f, offset.normalized, out RaycastHit hit,
+                Mathf.Sqrt(distance), Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) &&
+                !hit.collider.transform.IsChildOf(candidate.transform.root))
+                continue;
+
+            bestDistance = distance;
+            bestTarget = candidate;
+        }
+
+        if (bestTarget != null)
+            TryFire();
+    }
+
+    void TryFire()
+    {
+        if (Time.time < nextFireTime)
+            return;
+
+        Fire();
+        shotsInBurst++;
+        if (shotsInBurst >= shotsPerBurst)
+        {
+            shotsInBurst = 0;
+            nextFireTime = Time.time + burstCooldown;
+        }
+        else
+            nextFireTime = Time.time + burstShotInterval;
     }
 
     void Fire()
