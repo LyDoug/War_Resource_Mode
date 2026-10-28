@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 // Builds a symmetric, neutral objective layout from the authored structure
 // templates. Main bases are deliberately never moved or duplicated.
@@ -18,6 +21,11 @@ public class BalancedBattlefieldLayout : MonoBehaviour
 
     readonly List<Vector3> occupiedPositions = new List<Vector3>();
     bool built;
+    bool radarQueued;
+    Vector3 radarCenter;
+    Vector3 radarTeamAxis;
+    Vector3 radarSideAxis;
+    float radarReach;
 
     public void Build()
     {
@@ -50,12 +58,75 @@ public class BalancedBattlefieldLayout : MonoBehaviour
         PlacePairs(oil, oilMinesPerSide, center, teamAxis, sideAxis, reach, 3);
         PlacePairs(factory, factoriesPerSide, center, teamAxis, sideAxis, reach, 0);
         PlacePairs(city, citiesPerSide, center, teamAxis, sideAxis, reach, 1);
+        // GameManager builds the battlefield in Awake. Delay the prefab
+        // instantiation until Start so an imported structure can never block
+        // the initial loadout screen from being created.
+        radarQueued = true;
+        radarCenter = center;
+        radarTeamAxis = teamAxis;
+        radarSideAxis = sideAxis;
+        radarReach = reach;
 
         Debug.Log("Mapa equilibrado criado: " +
             (factoriesPerSide * 2) + " fábricas, " +
             (citiesPerSide * 2) + " cidades, " +
             (steelMinesPerSide * 2) + " minas de aço e " +
             (oilMinesPerSide * 2) + " minas de petróleo.");
+    }
+
+    void Start()
+    {
+        if (!radarQueued)
+            return;
+
+        radarQueued = false;
+        CreateRadarStation(radarCenter, radarTeamAxis, radarSideAxis, radarReach);
+    }
+
+    void CreateRadarStation(Vector3 center, Vector3 teamAxis, Vector3 sideAxis, float reach)
+    {
+        // The radar is a single central objective, rather than a starting
+        // asset. Its owner gains extended artillery observation range.
+        foreach (RadarStation existing in FindObjectsByType<RadarStation>(FindObjectsSortMode.None))
+            if (existing != null)
+                return;
+
+        GameObject prefab = null;
+#if UNITY_EDITOR
+        prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/CartoonMilitaryModelPack/Prefebs/Building_Prefebs/Radar_Prefeb.prefab");
+#endif
+        if (prefab == null)
+        {
+            Debug.LogWarning("Radar_Prefeb não foi encontrado. Adicione-o à cena para habilitar o objetivo de radar.");
+            return;
+        }
+
+        GameObject root = Instantiate(prefab);
+        root.name = "Radar Station - Neutral";
+        // The imported radar is authored much smaller than the battlefield
+        // structures. Make it a deliberate landmark without changing its
+        // world-space capture radius below.
+        root.transform.localScale *= 7f;
+
+        // Keep the capture volume on a separate child. Putting the capture
+        // component on the prefab root turns every model collider into a
+        // trigger, which prevents projectiles from ever damaging the radar.
+        GameObject captureObject = new GameObject("Radar Capture Zone");
+        captureObject.transform.SetParent(root.transform, false);
+        SphereCollider area = captureObject.AddComponent<SphereCollider>();
+        area.isTrigger = true;
+        float scale = Mathf.Max(0.001f, Mathf.Abs(root.transform.lossyScale.x));
+        area.radius = 14f / scale;
+        CaptureTriggerAdvanced capture = captureObject.AddComponent<CaptureTriggerAdvanced>();
+        capture.structureType = StructureType.Radar;
+        capture.currentOwner = Team.Neutral;
+        RadarStation radar = root.GetComponent<RadarStation>() ?? root.AddComponent<RadarStation>();
+        radar.team = Team.Neutral;
+
+        Vector3 desired = center + teamAxis * 32f + sideAxis * (reach * 0.06f);
+        PlaceStructure(capture, FindValidGround(desired, center, teamAxis));
+        occupiedPositions.Add(capture.transform.position);
     }
 
     CaptureTriggerAdvanced FindTemplate(StructureType type, ResourceType resource)
@@ -172,9 +243,11 @@ public class BalancedBattlefieldLayout : MonoBehaviour
         health.endsMatchOnDestruction = false;
         health.respawnDelay = 5f;
         float maxHealth = capture.structureType == StructureType.Factory ? 800f :
-            capture.structureType == StructureType.City ? 650f : 450f;
+            capture.structureType == StructureType.City ? 650f :
+            capture.structureType == StructureType.Radar ? 550f : 450f;
         float armor = capture.structureType == StructureType.Factory ? 0.35f :
-            capture.structureType == StructureType.City ? 0.30f : 0.25f;
+            capture.structureType == StructureType.City ? 0.30f :
+            capture.structureType == StructureType.Radar ? 0.28f : 0.25f;
         health.ConfigureDurability(maxHealth, armor);
         capture.baseScript = health;
     }

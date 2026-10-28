@@ -721,6 +721,24 @@ void SetupCamera(
     // =========================================================
     // SPAWN VEHICLE
     // =========================================================
+    static void RaiseVehicleVisualAboveGround(GameObject vehicle, float groundHeight, float clearance)
+    {
+        Renderer[] renderers = vehicle.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0)
+            return;
+
+        float lowest = float.PositiveInfinity;
+        foreach (Renderer renderer in renderers)
+            if (renderer.enabled)
+                lowest = Mathf.Min(lowest, renderer.bounds.min.y);
+        if (float.IsPositiveInfinity(lowest))
+            return;
+
+        float desiredBottom = groundHeight + clearance;
+        if (lowest < desiredBottom)
+            vehicle.transform.position += Vector3.up * (desiredBottom - lowest);
+    }
+
     void EnsureRuntimeVehicleComponents(GameObject vehicle, VehicleBlueprint blueprint)
     {
         if (vehicle.GetComponentInChildren<VehicleController>() != null)
@@ -980,6 +998,12 @@ void SetupCamera(
             spawnPos,
             spawnRotation
         );
+
+        // The IFV mesh was authored with a pivot below its wheels. Settle its
+        // visible bounds just above terrain before creating its runtime
+        // collider, so it does not begin half-buried in the ground.
+        if (blueprint.role == VehicleRole.APC)
+            RaiseVehicleVisualAboveGround(currentVehicle, spawnPos.y, 0.16f);
 
         EnsureRuntimeVehicleComponents(currentVehicle, blueprint);
         ConfigureVehicleDurability(currentVehicle, blueprint.role);

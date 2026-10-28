@@ -84,6 +84,8 @@ public class SPGWeapon : MonoBehaviour
     public bool IsRetracting => deploymentState == DeploymentState.Retracting;
     public bool IsDeployed => deploymentState == DeploymentState.Deployed;
     public Team OwningTeam => GetOwningTeam();
+    public float EffectiveTacticalVisionRange => RadarStation.IsRadarOnline(OwningTeam)
+        ? tacticalVisionRange * 1.75f : tacticalVisionRange;
     public string AmmoName => selectedAmmo == ArtilleryAmmoType.HE ? "HE" : "SMOKE";
     public bool HasRecentShot => Time.time - lastShotTime < 3.5f;
     public Vector3 LastShotTarget => lastShotTarget;
@@ -331,7 +333,7 @@ public class SPGWeapon : MonoBehaviour
     {
         Vector3 offset = worldPosition - transform.root.position;
         offset.y = 0f;
-        return offset.sqrMagnitude <= tacticalVisionRange * tacticalVisionRange ||
+        return offset.sqrMagnitude <= EffectiveTacticalVisionRange * EffectiveTacticalVisionRange ||
             TacticalRevealZone.IsRevealed(GetOwningTeam(), worldPosition);
     }
 

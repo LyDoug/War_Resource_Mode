@@ -477,7 +477,7 @@ public class GameHUD : MonoBehaviour
         // Local player's SPG position: compact green triangle.
         Vector2 playerPoint = WorldToMap(spg.transform.root.position, mapContent, center, halfSize);
         float scale = mapContent.width / (halfSize * 2f);
-        DrawMapRangeRing(playerPoint, spg.tacticalVisionRange * scale, mapContent, new Color(0.20f, 0.95f, 0.35f, 0.72f));
+        DrawMapRangeRing(playerPoint, spg.EffectiveTacticalVisionRange * scale, mapContent, new Color(0.20f, 0.95f, 0.35f, 0.72f));
         DrawMapRangeRing(playerPoint, spg.minimumFiringRange * scale, mapContent, new Color(1f, 0.35f, 0.12f, 0.88f));
         GUI.color = Color.green;
         GUI.Label(new Rect(playerPoint.x - 7f, playerPoint.y - 9f, 14f, 14f), "▲",
@@ -516,7 +516,7 @@ public class GameHUD : MonoBehaviour
 
         GUI.color = previous;
         GUI.Label(new Rect(map.x, map.yMax + 3f, map.width, 18f),
-            "F FABRICA | C CIDADE | S MINA ACO | O MINA OLEO | ▲ SPG | X OBSERVADOR/INIMIGO",
+            "F FABRICA | C CIDADE | S MINA ACO | O MINA OLEO | R RADAR | ▲ SPG | X OBSERVADOR/INIMIGO",
             new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11 });
 
         Event current = Event.current;
@@ -569,6 +569,7 @@ public class GameHUD : MonoBehaviour
     {
         if (structure.structureType == StructureType.Factory) return "F";
         if (structure.structureType == StructureType.City) return "C";
+        if (structure.structureType == StructureType.Radar) return "R";
         if (structure.resourceNode != null && structure.resourceNode.resourceType == ResourceType.Oil) return "O";
         return "S";
     }
